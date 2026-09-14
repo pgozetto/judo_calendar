@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #f7f6f2;
+  --foreground: #171310;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Segoe UI Variable Text", "Inter", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a {
+  outline-offset: 3px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid #dc2626;
+}
+
+.dark {
+  --background: #100e0c;
+  --foreground: #fafaf9;
+  color-scheme: dark;
+}
+
+.dark button:focus-visible,
+.dark a:focus-visible,
+.dark input:focus-visible,
+.dark textarea:focus-visible,
+.dark select:focus-visible {
+  outline-color: #d9a337;
+}
+
+.section-kicker {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #b91c1c;
+}
+
+.dark .section-kicker {
+  color: #f2bd55;
+}
+
+.section-title {
+  margin-top: 0.75rem;
+  text-wrap: balance;
+  font-size: clamp(2.35rem, 5vw, 4.6rem);
+  line-height: 0.98;
+  font-weight: 900;
+  letter-spacing: -0.052em;
+}
+
+.section-copy {
+  margin-top: 1.25rem;
+  font-size: 1.0625rem;
+  line-height: 1.8rem;
+  color: #57534e;
+}
+
+.dark .section-copy {
+  color: #a8a29e;
+}
+
+.app-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 99px;
+  background: #d6d3d1;
+}
+
+.dark .app-scrollbar::-webkit-scrollbar-thumb {
+  background: #57534e;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
