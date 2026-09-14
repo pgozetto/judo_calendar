@@ -84,11 +84,6 @@ export function AuthPage({ mode, initialMessage = "" }: { mode: "login" | "signu
       } else {
         const search = new URLSearchParams(window.location.search);
         const destination = safeNextPath(search.get("next"));
-        // Contas antigas podem ter sido criadas antes do provisionamento do
-        // perfil. A chamada é idempotente e, em ambientes ainda sem a nova
-        // migração, não impede o acesso de contas que já possuem perfil.
-        await supabase.rpc("ensure_user_workspace");
-
         // A navegação completa garante que o servidor receba os cookies da
         // sessão recém-criada antes de renderizar a área privada.
         window.location.assign(destination);

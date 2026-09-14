@@ -72,7 +72,10 @@ export default async function AppPage() {
 
   const profile = profileResult.data;
   if (!profile) {
-    redirect("/entrar?erro=Sua conta foi autenticada, mas o perfil ainda não foi preparado. Tente entrar novamente.");
+    const { data: workspaceReady, error: workspaceError } = await supabase.rpc("ensure_user_workspace");
+    if (!workspaceError && workspaceReady) redirect("/app");
+
+    redirect("/entrar?erro=Sua conta foi autenticada, mas o perfil ainda não foi preparado. A atualização do banco precisa ser aplicada.");
   }
 
   const planId = subscriptionResult.data?.plan_id ?? "free";
