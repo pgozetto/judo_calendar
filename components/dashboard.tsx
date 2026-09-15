@@ -3,6 +3,7 @@
 import {
   Bell,
   BookOpenCheck,
+  CalendarClock,
   CalendarDays,
   Check,
   ChevronLeft,
@@ -35,7 +36,6 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Brand } from "./brand";
@@ -48,6 +48,7 @@ import type {
   FreeNote,
   GamePlanDraft,
   Profile,
+  NotificationItem,
   TechniqueItem,
   TrainingEntry,
   TrainingSchedule,
@@ -95,6 +96,12 @@ const techniqueColors = [
   "bg-amber-100 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300",
   "bg-violet-100 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300",
   "bg-stone-200 text-stone-700 dark:bg-white/10 dark:text-stone-300",
+];
+
+const paymentPlans = [
+  { id: "free" as const, name: "Gratuito", price: "R$ 0", suffix: "", description: "Para começar a registrar sua evolução.", features: ["Calendário de treinos", "Plano de jogo", "Notas livres", "Avisos pré-treino"] },
+  { id: "pro_monthly" as const, name: "Pró", price: "R$ 20", suffix: "/mês", description: "O sistema completo para competir melhor.", features: ["Tudo do Gratuito", "Biblioteca de golpes", "Vídeos e imagens", "Revisão semanal por e-mail", "Calendário FPJUDO"] },
+  { id: "founder_lifetime" as const, name: "Vitalício", price: "R$ 150", suffix: " uma vez", description: "Acesso completo, sem mensalidade.", features: ["Todos os recursos Pró", "Pagamento único", "Atualizações futuras", "Selo de membro fundador"] },
 ];
 
 function toDateKey(date: Date) {
@@ -190,16 +197,29 @@ export function Dashboard({ initialData }: { initialData: DashboardInitialData }
   const [selectedCompetition, setSelectedCompetition] = useState<CompetitionEvent | null>(null);
   const [competitionAlertIds, setCompetitionAlertIds] = useState(initialData.competitionAlertIds);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [pricingOpen, setPricingOpen] = useState(false);
+  const [notificationItems, setNotificationItems] = useState<NotificationItem[]>(initialData.notifications);
   const [profile, setProfile] = useState<Profile>(initialData.profile);
   const [emailPreferences, setEmailPreferences] = useState<EmailPreferences>(initialData.emailPreferences);
 
   const monthCells = useMemo(() => calendarCells(calendarMonth), [calendarMonth]);
   const todayKey = toDateKey(new Date());
   const recentEntries = [...entries].sort((a, b) => b.date.localeCompare(a.date));
+  const notificationCount = notificationItems.filter((notification) => !notification.readAt).length + (trainingSchedule.days.length ? 1 : 0) + initialData.competitions.length;
 
   function chooseSection(next: Section) {
     setSection(next);
     setSidebarOpen(false);
+  }
+
+  function openNotifications() {
+    setNotificationsOpen(true);
+    const unread = notificationItems.some((notification) => !notification.readAt);
+    if (!unread) return;
+    const readAt = new Date().toISOString();
+    setNotificationItems((current) => current.map((notification) => ({ ...notification, readAt: notification.readAt ?? readAt })));
+    void supabase.from("notifications").update({ read_at: readAt }).eq("user_id", initialData.userId).is("read_at", null);
   }
 
   function openTrainingEditor(dateKey = todayKey) {
@@ -428,7 +448,7 @@ export function Dashboard({ initialData }: { initialData: DashboardInitialData }
     <main className="min-h-screen overflow-x-hidden bg-[#f4f2ed] text-stone-950 dark:bg-[#100e0c] dark:text-stone-50">
       <aside className={`fixed inset-y-0 left-0 z-50 w-[272px] border-r border-stone-200 bg-[#fbfaf7] transition-transform duration-300 dark:border-white/8 dark:bg-[#171310] lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="flex h-full flex-col px-4 py-5">
-          <div className="flex items-center justify-between px-2"><Brand href="/app" /><button onClick={() => setSidebarOpen(false)} className="grid size-9 place-items-center rounded-lg hover:bg-stone-100 dark:hover:bg-white/5 lg:hidden" aria-label="Fechar menu"><X className="size-5" /></button></div>
+          <div className="flex items-center justify-between px-2"><Brand href="/" /><button onClick={() => setSidebarOpen(false)} className="grid size-9 place-items-center rounded-lg hover:bg-stone-100 dark:hover:bg-white/5 lg:hidden" aria-label="Fechar menu"><X className="size-5" /></button></div>
           <nav className="app-scrollbar mt-9 flex-1 overflow-y-auto">
             {navGroups.map((group) => (
               <div key={group.label} className="mb-7">
@@ -446,7 +466,7 @@ export function Dashboard({ initialData }: { initialData: DashboardInitialData }
           <div className="rounded-2xl bg-stone-950 p-4 text-white dark:bg-[#2a2118]">
             <div className="flex items-center gap-2 text-amber-300"><Crown className="size-4" /><span className="text-[10px] font-black uppercase tracking-wider">{initialData.plan.proAccess ? "Seu plano está ativo" : "Libere todo o dojo"}</span></div>
             <p className="mt-2 text-xs leading-5 text-stone-300">{initialData.plan.proAccess ? "Biblioteca, competições e revisões disponíveis." : "Vídeos, biblioteca e revisão semanal."}</p>
-            <Link href={initialData.plan.proAccess ? "/assinar" : "/#planos"} className="mt-3 block rounded-lg bg-red-600 px-3 py-2 text-center text-xs font-extrabold transition hover:bg-red-500 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400">{initialData.plan.proAccess ? "Gerenciar plano" : "Conhecer o Pró"}</Link>
+            <button type="button" onClick={() => setPricingOpen(true)} className="mt-3 block w-full rounded-lg bg-red-600 px-3 py-2 text-center text-xs font-extrabold transition hover:bg-red-500 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400">{initialData.plan.proAccess ? "Gerenciar plano" : "Conhecer o Pró"}</button>
           </div>
           <button type="button" onClick={() => setSettingsOpen(true)} className="group mt-3 flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-stone-100 dark:hover:bg-white/5" aria-label="Abrir configurações da conta">
             <ProfileAvatar profile={profile} />
@@ -461,7 +481,7 @@ export function Dashboard({ initialData }: { initialData: DashboardInitialData }
         <header className="sticky top-0 z-30 flex h-[68px] items-center justify-between border-b border-stone-200/80 bg-[#f4f2ed]/88 px-4 backdrop-blur-xl sm:px-7 dark:border-white/8 dark:bg-[#100e0c]/85">
           <div className="flex items-center gap-3"><button onClick={() => setSidebarOpen(true)} className="grid size-10 place-items-center rounded-xl border border-stone-200 bg-white dark:border-white/8 dark:bg-white/5 lg:hidden" aria-label="Abrir menu"><Menu className="size-5" /></button><div><p className="text-[10px] font-black uppercase tracking-[.14em] text-stone-400 lg:hidden">Meu dojo</p><h1 className="text-base font-black tracking-[-.02em] sm:text-lg">{sectionLabels[section]}</h1></div></div>
           <div className="flex items-center gap-2">
-            <button className="relative grid size-10 place-items-center rounded-xl border border-stone-200 bg-white text-stone-500 transition hover:text-red-700 dark:border-white/8 dark:bg-white/5 dark:text-stone-300 dark:hover:text-amber-300" aria-label="Avisos"><Bell className="size-[18px]" /><span className="absolute right-2 top-2 size-1.5 rounded-full bg-red-600 dark:bg-amber-400" /></button>
+            <button type="button" onClick={openNotifications} className="relative grid size-10 place-items-center rounded-xl border border-stone-200 bg-white text-stone-500 transition hover:text-red-700 dark:border-white/8 dark:bg-white/5 dark:text-stone-300 dark:hover:text-amber-300" aria-label="Abrir avisos" aria-expanded={notificationsOpen}><Bell className="size-[18px]" />{notificationCount > 0 && <span className="absolute right-1.5 top-1.5 grid min-w-3.5 place-items-center rounded-full bg-red-600 px-1 text-[8px] font-black leading-3 text-white dark:bg-amber-400 dark:text-stone-950">{notificationCount > 9 ? "9+" : notificationCount}</span>}</button>
             <ThemeToggle />
             <button onClick={() => openTrainingEditor()} className="ml-1 hidden items-center gap-2 rounded-xl bg-red-700 px-4 py-2.5 text-sm font-extrabold text-white shadow-sm transition hover:bg-red-800 sm:flex dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400"><Plus className="size-4" /> Registrar treino</button>
           </div>
@@ -488,9 +508,35 @@ export function Dashboard({ initialData }: { initialData: DashboardInitialData }
       {reviewOpen && <ReviewScheduleModal schedule={reviewSchedule} onClose={() => setReviewOpen(false)} onSave={saveReviewSchedule} />}
       {selectedCompetition && <CompetitionModal event={selectedCompetition} alertEnabled={competitionAlertIds.includes(selectedCompetition.id)} onToggleAlert={() => toggleCompetitionAlert(selectedCompetition.id)} onClose={() => setSelectedCompetition(null)} />}
       {settingsOpen && <SettingsPanel profile={profile} preferences={emailPreferences} onClose={() => setSettingsOpen(false)} onSaveProfile={saveProfile} onSavePreferences={savePreferences} onPasswordChange={changePassword} onSignOut={signOut} onDeleteAccount={deleteAccount} />}
+      {notificationsOpen && <NotificationsPanel notifications={notificationItems} competitions={initialData.competitions} trainingSchedule={trainingSchedule} todayKey={todayKey} onClose={() => setNotificationsOpen(false)} onOpenTraining={() => { setNotificationsOpen(false); openTrainingEditor(); }} onSelectCompetition={(event) => { setNotificationsOpen(false); setSelectedCompetition(event); }} />}
+      {pricingOpen && <PlansModal currentPlanId={initialData.plan.id} currentPlanName={initialData.plan.name} onClose={() => setPricingOpen(false)} />}
       {savedMessage && <div className="fixed bottom-24 left-1/2 z-[70] flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-xl bg-stone-950 px-4 py-3 text-sm font-bold text-white shadow-2xl dark:bg-amber-500 dark:text-stone-950 lg:bottom-7"><Check className="size-4" />{savedMessage}</div>}
     </main>
   );
+}
+
+function PlansModal({ currentPlanId, currentPlanName, onClose }: { currentPlanId: string; currentPlanName: string; onClose: () => void }) {
+  const [loading, setLoading] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+
+  async function checkout(plan: "pro_monthly" | "founder_lifetime") {
+    setLoading(plan);
+    setMessage("");
+    const response = await fetch("/api/billing/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan }) });
+    const result = await response.json().catch(() => ({})) as { url?: string; error?: string };
+    if (response.ok && result.url) {
+      window.location.assign(result.url);
+      return;
+    }
+    setMessage(result.error ?? "Não foi possível abrir o pagamento.");
+    setLoading(null);
+  }
+
+  return <div className="fixed inset-0 z-[70] grid place-items-center bg-black/45 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="plans-title"><button type="button" className="absolute inset-0" onClick={onClose} aria-label="Fechar planos" /><section className="relative max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-y-auto rounded-[26px] bg-[#fbfaf7] p-5 shadow-2xl dark:bg-[#211c18] sm:p-7"><header className="flex items-start justify-between gap-5"><div><p className="text-[10px] font-black uppercase tracking-[.15em] text-red-700 dark:text-amber-400">Judo Calendar Pró</p><h2 id="plans-title" className="mt-2 text-3xl font-black tracking-[-.04em]">Escolha seu plano.</h2><p className="mt-2 text-sm text-stone-500 dark:text-stone-400">Seu plano atual: <strong>{currentPlanName}</strong>.</p></div><button type="button" onClick={onClose} className="grid size-10 shrink-0 place-items-center rounded-xl border border-stone-200 bg-white dark:border-white/8 dark:bg-white/5" aria-label="Fechar planos"><X className="size-5" /></button></header>{message&&<p role="alert" className="mt-5 rounded-xl bg-amber-50 p-4 text-sm font-bold text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">{message}</p>}<div className="mt-7 grid gap-4 lg:grid-cols-3">{paymentPlans.map((plan,index)=><article key={plan.id} className={`relative rounded-[22px] border p-5 ${index===1?"border-red-300 bg-white shadow-lg shadow-red-100/40 dark:border-amber-500/25 dark:bg-white/[.035] dark:shadow-none":"border-stone-200 bg-white dark:border-white/10 dark:bg-white/[.035]"}`}>{index===1&&<span className="absolute -top-3 right-5 rounded-full bg-red-700 px-2.5 py-1 text-[9px] font-black uppercase text-white dark:bg-amber-500 dark:text-stone-950">Mais escolhido</span>}<div className="flex items-center gap-2"><Crown className={`size-4 ${index===1?"text-red-700 dark:text-amber-400":"text-stone-400"}`} /><h3 className="text-lg font-black">{plan.name}</h3></div><p className="mt-4 text-3xl font-black tracking-tight">{plan.price}<span className="text-sm font-bold text-stone-400">{plan.suffix}</span></p><p className="mt-3 min-h-12 text-sm leading-6 text-stone-500 dark:text-stone-400">{plan.description}</p><ul className="mt-5 space-y-2.5">{plan.features.map((feature)=><li key={feature} className="flex items-start gap-2 text-xs font-bold"><Check className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-300" />{feature}</li>)}</ul><button type="button" disabled={Boolean(loading)||plan.id==="free"||currentPlanId===plan.id} onClick={() => { if (plan.id !== "free" && currentPlanId !== plan.id) void checkout(plan.id); }} className={`mt-6 flex h-11 w-full items-center justify-center rounded-xl px-3 text-xs font-extrabold disabled:cursor-not-allowed disabled:opacity-60 ${plan.id==="free"||currentPlanId===plan.id?"border border-stone-200 bg-stone-50 text-stone-500 dark:border-white/10 dark:bg-white/5 dark:text-stone-400":"bg-red-700 text-white hover:bg-red-800 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400"}`}>{currentPlanId===plan.id?"Plano atual":loading===plan.id?"Abrindo pagamento...":plan.id==="free"?"Plano gratuito":"Escolher este plano"}</button></article>)}</div></section></div>;
+}
+
+function NotificationsPanel({ notifications, competitions, trainingSchedule, todayKey, onClose, onOpenTraining, onSelectCompetition }: { notifications: NotificationItem[]; competitions: CompetitionEvent[]; trainingSchedule: TrainingSchedule; todayKey: string; onClose: () => void; onOpenTraining: () => void; onSelectCompetition: (event: CompetitionEvent) => void }) {
+  return <div className="fixed inset-0 z-[70] flex justify-end bg-black/35 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="notifications-title"><button type="button" className="absolute inset-0" onClick={onClose} aria-label="Fechar avisos" /><aside className="app-scrollbar relative h-full w-full max-w-[440px] overflow-y-auto bg-[#fbfaf7] shadow-2xl dark:bg-[#171310]"><header className="sticky top-0 z-10 flex items-start justify-between gap-5 border-b border-stone-200 bg-[#fbfaf7]/95 px-5 py-5 backdrop-blur-xl dark:border-white/8 dark:bg-[#171310]/95"><div><p className="text-[10px] font-black uppercase tracking-[.15em] text-red-700 dark:text-amber-400">Central de avisos</p><h2 id="notifications-title" className="mt-1 text-2xl font-black tracking-tight">Treinos e competições</h2><p className="mt-1 text-xs text-stone-400">Acompanhe o que merece sua atenção.</p></div><button type="button" onClick={onClose} className="grid size-10 shrink-0 place-items-center rounded-xl border border-stone-200 bg-white dark:border-white/8 dark:bg-white/5" aria-label="Fechar avisos"><X className="size-5" /></button></header><div className="space-y-3 p-5"><button type="button" onClick={onOpenTraining} className="flex w-full items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-left transition hover:border-red-300 dark:border-amber-500/20 dark:bg-amber-500/[.06] dark:hover:border-amber-500/35"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-red-700 text-white dark:bg-amber-500 dark:text-stone-950"><CalendarClock className="size-5" /></span><span className="min-w-0 flex-1"><span className="block text-[10px] font-black uppercase tracking-wider text-red-700 dark:text-amber-300">Próximo aviso de treino</span><span className="mt-1 block text-sm font-black">{nextTrainingLabel(trainingSchedule, todayKey)}</span><span className="mt-1 block text-xs leading-5 text-stone-500 dark:text-stone-400">Abra o registro para anotar seu próximo treino.</span></span><ChevronRight className="mt-1 size-4 shrink-0 text-red-700 dark:text-amber-300" /></button>{notifications.map((notification)=><article key={notification.id} className={`flex items-start gap-3 rounded-2xl border p-4 ${notification.readAt?"border-stone-200 bg-white dark:border-white/8 dark:bg-white/[.035]":"border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/[.06]"}`}><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-red-700 dark:bg-white/8 dark:text-amber-300">{notification.kind==="billing"?<Crown className="size-5" />:<Bell className="size-5" />}</span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><h3 className="text-sm font-black">{notification.title}</h3><time className="shrink-0 text-[10px] font-bold text-stone-400">{formatRelativeUpdate(notification.createdAt)}</time></div><p className="mt-1 text-xs leading-5 text-stone-500 dark:text-stone-400">{notification.body}</p></div></article>)}{competitions.map((event)=><button type="button" key={event.id} onClick={() => onSelectCompetition(event)} className="flex w-full items-start gap-3 rounded-2xl border border-stone-200 bg-white p-4 text-left transition hover:border-red-200 hover:bg-stone-50 dark:border-white/8 dark:bg-white/[.035] dark:hover:border-amber-500/20"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"><Trophy className="size-5" /></span><span className="min-w-0 flex-1"><span className="block text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">Competição no radar</span><span className="mt-1 block truncate text-sm font-black">{event.name}</span><span className="mt-1 block text-xs text-stone-400">{event.dateLabel} · {event.place}</span></span><ChevronRight className="mt-1 size-4 shrink-0 text-stone-300" /></button>)}{notifications.length===0&&competitions.length===0&&<div className="rounded-2xl border border-dashed border-stone-200 p-8 text-center dark:border-white/10"><Bell className="mx-auto size-7 text-stone-300" /><p className="mt-3 text-sm font-bold">Nenhum aviso por enquanto.</p><p className="mt-1 text-xs leading-5 text-stone-400">Seus próximos lembretes aparecerão aqui.</p></div>}</div></aside></div>;
 }
 
 function Overview({ entries, todayKey, trainingSchedule, reviewSchedule, onRegister, onOpenCalendar, onOpenPlan, onEditSchedule, onEditReview }: { entries: TrainingEntry[]; todayKey: string; trainingSchedule: TrainingSchedule; reviewSchedule: ReviewSchedule; onRegister: (date?: string) => void; onOpenCalendar: () => void; onOpenPlan: () => void; onEditSchedule: () => void; onEditReview: () => void }) {
@@ -611,7 +657,7 @@ function CompetitionsView({ events, todayKey, onSelect }: { events: CompetitionE
   return <div><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><div className="flex items-center gap-2"><p className="text-xs font-black uppercase tracking-[.14em] text-red-700 dark:text-amber-400">Calendário FPJUDO</p><span className="rounded-md bg-amber-100 px-2 py-1 text-[8px] font-black text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">PRÓ</span></div><h2 className="mt-2 text-3xl font-black tracking-[-.045em] sm:text-4xl">Competições no radar.</h2><p className="mt-2 text-sm text-stone-500 dark:text-stone-400">Datas conferidas no calendário oficial mais recente da Federação.</p></div><div className="flex flex-wrap gap-2"><a href="/api/calendar/competitions.ics" className="flex items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm font-extrabold transition hover:border-red-200 dark:border-white/10 dark:bg-white/5 dark:hover:border-amber-500/20"><CalendarDays className="size-4" /> Exportar calendário</a><a href={nextEvent.sourceUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm font-extrabold transition hover:border-red-200 dark:border-white/10 dark:bg-white/5 dark:hover:border-amber-500/20"><ExternalLink className="size-4" /> Fonte oficial</a></div></div><div className="mt-7 grid gap-5 xl:grid-cols-[1.2fr_.8fr]"><section className="overflow-hidden rounded-[24px] border border-stone-200 bg-white dark:border-white/8 dark:bg-white/[.035]"><div className="flex items-center justify-between border-b border-stone-100 p-5 dark:border-white/8"><h3 className="font-black">Próximos eventos</h3><span className="text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Fonte oficial FPJUDO</span></div><div className="divide-y divide-stone-100 p-2 dark:divide-white/7">{events.map((event,index)=><button type="button" key={event.id} onClick={() => onSelect(event)} className="group flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-stone-50 sm:gap-4 sm:p-4 dark:hover:bg-white/5"><span className={`grid h-14 w-16 shrink-0 place-items-center rounded-xl text-center ${index===0?"bg-red-700 text-white dark:bg-amber-500 dark:text-stone-950":"bg-stone-100 dark:bg-white/6"}`}><span><b className="block text-base leading-4">{event.day}</b><small className="text-[9px] font-black">{event.month}</small></span></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-black">{event.name}</p><p className="mt-1 truncate text-xs text-stone-400">{event.place}</p></div><span className="hidden rounded-full bg-emerald-50 px-3 py-1.5 text-[9px] font-black text-emerald-700 sm:block dark:bg-emerald-500/10 dark:text-emerald-300">{event.status}</span><ChevronRight className="size-4 shrink-0 text-stone-300 transition group-hover:translate-x-1" /></button>)}</div></section><button type="button" onClick={() => onSelect(nextEvent)} className="group relative min-h-80 overflow-hidden rounded-[24px] bg-stone-950 p-6 text-left text-white dark:bg-[#2a2118]"><div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(220,38,38,.30),transparent_48%)] dark:bg-[radial-gradient(circle_at_top_right,rgba(217,163,55,.24),transparent_48%)]" /><div className="relative flex h-full flex-col"><Trophy className="size-8 text-red-400 dark:text-amber-400" /><p className="mt-auto text-[10px] font-black uppercase tracking-[.15em] text-red-400 dark:text-amber-400">Próximo no calendário</p><h3 className="mt-3 text-3xl font-black tracking-[-.04em]">{nextEvent.name}</h3><p className="mt-2 text-sm text-stone-400">{daysUntil === 0 ? "Acontece hoje" : `Faltam ${daysUntil} dias`}</p><div className="mt-5 flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3"><span className="text-xs font-bold">Ver informações oficiais</span><ChevronRight className="size-4 transition group-hover:translate-x-1" /></div></div></button></div><Paywall title="Nunca mais perca uma data importante." text="Ative o calendário FPJUDO, receba alertas e conecte seu plano de jogo à próxima competição." /></div>;
 }
 
-function Paywall({title,text}:{title:string;text:string}) { return <section className="mt-5 flex flex-col items-start justify-between gap-5 rounded-[22px] border border-amber-200 bg-amber-50 p-5 sm:flex-row sm:items-center sm:p-6 dark:border-amber-500/15 dark:bg-amber-500/[.05]"><div className="flex items-start gap-4"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-amber-400 text-stone-950"><Crown className="size-5" /></span><div><h3 className="font-black">{title}</h3><p className="mt-1 max-w-2xl text-sm leading-6 text-stone-600 dark:text-stone-400">{text}</p></div></div><Link href="/#planos" className="w-full shrink-0 rounded-xl bg-stone-950 px-5 py-3 text-center text-sm font-extrabold text-white sm:w-auto dark:bg-amber-500 dark:text-stone-950">Ver planos</Link></section> }
+function Paywall({title,text}:{title:string;text:string}) { return <section className="mt-5 flex flex-col items-start justify-between gap-5 rounded-[22px] border border-amber-200 bg-amber-50 p-5 sm:flex-row sm:items-center sm:p-6 dark:border-amber-500/15 dark:bg-amber-500/[.05]"><div className="flex items-start gap-4"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-amber-400 text-stone-950"><Crown className="size-5" /></span><div><h3 className="font-black">{title}</h3><p className="mt-1 max-w-2xl text-sm leading-6 text-stone-600 dark:text-stone-400">{text}</p></div></div><button type="button" onClick={() => window.location.assign("/#planos")} className="w-full shrink-0 rounded-xl bg-stone-950 px-5 py-3 text-center text-sm font-extrabold text-white sm:w-auto dark:bg-amber-500 dark:text-stone-950">Ver planos</button></section> }
 
 function TrainingEditor({ draft, setDraft, exists, onClose, onSave, onDelete }: { draft: TrainingEntry; setDraft: (draft: TrainingEntry) => void; exists: boolean; onClose: () => void; onSave: (event: FormEvent) => void; onDelete: () => void }) {
   const date = fromDateKey(draft.date);

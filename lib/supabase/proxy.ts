@@ -33,10 +33,13 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const { data } = await supabase.auth.getClaims();
-  const isAuthenticated = Boolean(data?.claims?.sub);
   const path = request.nextUrl.pathname;
   const isProtected = protectedPaths.some((prefix) => path.startsWith(prefix));
+  const needsAuthCheck = isProtected || authPaths.includes(path);
+  if (!needsAuthCheck) return response;
+
+  const { data } = await supabase.auth.getClaims();
+  const isAuthenticated = Boolean(data?.claims?.sub);
 
   if (!isAuthenticated && isProtected) {
     const url = request.nextUrl.clone();

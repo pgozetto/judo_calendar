@@ -60,6 +60,16 @@ export type TechniqueItem = {
   isPro: boolean;
 };
 
+export type NotificationItem = {
+  id: string;
+  title: string;
+  body: string;
+  kind: string;
+  href: string | null;
+  createdAt: string;
+  readAt: string | null;
+};
+
 export type DashboardInitialData = {
   userId: string;
   profile: Profile;
@@ -72,6 +82,7 @@ export type DashboardInitialData = {
   competitions: CompetitionEvent[];
   competitionAlertIds: string[];
   techniques: TechniqueItem[];
+  notifications: NotificationItem[];
   plan: { id: string; name: string; proAccess: boolean };
 };
 

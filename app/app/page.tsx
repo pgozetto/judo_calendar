@@ -43,7 +43,6 @@ export default async function AppPage() {
   if (!userId) redirect("/entrar?next=/app");
 
   const [
-    userResult,
     profileResult,
     entriesResult,
     gamePlanResult,
@@ -55,8 +54,9 @@ export default async function AppPage() {
     alertsResult,
     techniquesResult,
     subscriptionResult,
+    notificationsResult,
+    plansResult,
   ] = await Promise.all([
-    supabase.auth.getUser(),
     supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
     supabase.from("training_records").select("*").eq("user_id", userId).order("training_date", { ascending: false }),
     supabase.from("game_plans").select("*").eq("user_id", userId).maybeSingle(),
@@ -68,6 +68,8 @@ export default async function AppPage() {
     supabase.from("competition_alerts").select("competition_id").eq("user_id", userId).eq("enabled", true),
     supabase.from("techniques").select("*").order("sort_order"),
     supabase.from("subscriptions").select("*").eq("user_id", userId).maybeSingle(),
+    supabase.from("notifications").select("id,title,body,kind,href,read_at,created_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(20),
+    supabase.from("subscription_plans").select("*").eq("active", true).order("price_cents"),
   ]);
 
   const profile = profileResult.data;
@@ -79,7 +81,7 @@ export default async function AppPage() {
   }
 
   const planId = subscriptionResult.data?.plan_id ?? "free";
-  const { data: planData } = await supabase.from("subscription_plans").select("*").eq("id", planId).maybeSingle();
+  const planData = (plansResult.data ?? []).find((plan) => plan.id === planId);
   const gamePlan = gamePlanResult.data;
   const trainingSchedule = trainingScheduleResult.data;
   const reviewSchedule = reviewScheduleResult.data;
@@ -90,7 +92,7 @@ export default async function AppPage() {
     profile: {
       displayName: profile.display_name,
       username: profile.username,
-      email: userResult.data.user?.email ?? profile.email,
+      email: profile.email,
       photo: profile.avatar_url,
     },
     entries: (entriesResult.data ?? []).map((entry) => ({
@@ -133,6 +135,15 @@ export default async function AppPage() {
       group: technique.classification,
       description: technique.description,
       isPro: technique.is_pro,
+    })),
+    notifications: (notificationsResult.data ?? []).map((notification) => ({
+      id: notification.id,
+      title: notification.title,
+      body: notification.body,
+      kind: notification.kind,
+      href: notification.href,
+      createdAt: notification.created_at,
+      readAt: notification.read_at,
     })),
     plan: { id: planData?.id ?? "free", name: planData?.name ?? "Gratuito", proAccess: planData?.pro_access ?? false },
   };
