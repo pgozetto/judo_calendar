@@ -20,7 +20,6 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 import { Brand } from "./brand";
 import { ThemeToggle } from "./theme-toggle";
@@ -77,7 +76,7 @@ const plans = [
     description: "O sistema completo para competir melhor.",
     features: ["Tudo do Gratuito", "Biblioteca de golpes", "Vídeos e imagens", "Revisão semanal por e-mail", "Calendário FPJUDO"],
     cta: "Assinar o Pró",
-    href: "/cadastro?plano=pro",
+    href: "/cadastro?plano=pro_monthly",
     featured: true,
   },
   {
@@ -87,7 +86,7 @@ const plans = [
     description: "Acesso completo, sem mensalidade.",
     features: ["Todos os recursos Pró", "Pagamento único", "Atualizações futuras", "Selo de membro fundador"],
     cta: "Garantir o vitalício",
-    href: "/cadastro?plano=vitalicio",
+    href: "/cadastro?plano=founder_lifetime",
   },
 ];
 
@@ -106,8 +105,8 @@ export function LandingPage() {
           </div>
           <div className="hidden items-center gap-3 md:flex">
             <ThemeToggle />
-            <Link href="/entrar" className="px-3 py-2 text-sm font-bold text-stone-700 transition hover:text-red-700 dark:text-stone-200 dark:hover:text-amber-300">Entrar</Link>
-            <Link href="/cadastro" className="rounded-xl bg-red-700 px-5 py-3 text-sm font-bold text-white shadow-[0_10px_25px_rgba(185,28,28,.2)] transition hover:-translate-y-0.5 hover:bg-red-800 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400">Começar grátis</Link>
+            <a href="/entrar" className="px-3 py-2 text-sm font-bold text-stone-700 transition hover:text-red-700 dark:text-stone-200 dark:hover:text-amber-300">Entrar</a>
+            <a href="/cadastro" className="rounded-xl bg-red-700 px-5 py-3 text-sm font-bold text-white shadow-[0_10px_25px_rgba(185,28,28,.2)] transition hover:-translate-y-0.5 hover:bg-red-800 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400">Começar grátis</a>
           </div>
           <button onClick={() => setMenuOpen(!menuOpen)} className="grid size-10 place-items-center rounded-xl border border-stone-200 md:hidden dark:border-white/10" aria-label="Abrir menu">
             {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
@@ -121,8 +120,8 @@ export function LandingPage() {
               ))}
               <div className="mt-3 flex items-center gap-2 border-t border-stone-200 pt-4 dark:border-white/10">
                 <ThemeToggle />
-                <Link href="/entrar" className="flex-1 rounded-xl border border-stone-300 px-4 py-3 text-center text-sm font-bold dark:border-white/15">Entrar</Link>
-                <Link href="/cadastro" className="flex-1 rounded-xl bg-red-700 px-4 py-3 text-center text-sm font-bold text-white dark:bg-amber-500 dark:text-stone-950">Criar conta</Link>
+                <a href="/entrar" onClick={() => setMenuOpen(false)} className="flex-1 rounded-xl border border-stone-300 px-4 py-3 text-center text-sm font-bold dark:border-white/15">Entrar</a>
+                <a href="/cadastro" onClick={() => setMenuOpen(false)} className="flex-1 rounded-xl bg-red-700 px-4 py-3 text-center text-sm font-bold text-white dark:bg-amber-500 dark:text-stone-950">Criar conta</a>
               </div>
             </div>
           </div>
@@ -143,12 +142,12 @@ export function LandingPage() {
               Registre o que aprendeu, entenda seus erros e entre no próximo treino com um plano claro para evoluir.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <Link href="/cadastro" className="group inline-flex items-center justify-center gap-2 rounded-xl bg-red-700 px-6 py-4 text-base font-extrabold text-white shadow-[0_15px_40px_rgba(185,28,28,.22)] transition hover:-translate-y-0.5 hover:bg-red-800 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400">
+              <a href="/cadastro" className="group inline-flex items-center justify-center gap-2 rounded-xl bg-red-700 px-6 py-4 text-base font-extrabold text-white shadow-[0_15px_40px_rgba(185,28,28,.22)] transition hover:-translate-y-0.5 hover:bg-red-800 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400">
                 Criar minha conta <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-              </Link>
-              <Link href="/app" className="inline-flex items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white/60 px-6 py-4 text-base font-extrabold text-stone-800 transition hover:border-red-300 hover:bg-white dark:border-white/12 dark:bg-white/5 dark:text-stone-100 dark:hover:border-amber-500/30 dark:hover:bg-white/8">
+              </a>
+              <a href="/app" className="inline-flex items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white/60 px-6 py-4 text-base font-extrabold text-stone-800 transition hover:border-red-300 hover:bg-white dark:border-white/12 dark:bg-white/5 dark:text-stone-100 dark:hover:border-amber-500/30 dark:hover:bg-white/8">
                 <CirclePlay className="size-5" /> Explorar demonstração
-              </Link>
+              </a>
             </div>
             <div className="mt-8 flex flex-wrap gap-x-6 gap-y-3 text-sm font-semibold text-stone-500 dark:text-stone-400">
               <span className="flex items-center gap-2"><Check className="size-4 text-red-700 dark:text-amber-400" /> Sem cartão</span>
@@ -176,8 +175,8 @@ export function LandingPage() {
                 </div>
                 <div className="min-w-0 p-4 sm:p-6">
                   <div className="flex items-start justify-between gap-3">
-                    <div><p className="text-xs font-bold text-stone-400">DOMINGO, 13 SET</p><h3 className="mt-1 text-xl font-black tracking-tight sm:text-2xl">Oss, Pedro!</h3></div>
-                    <span className="rounded-lg bg-red-700 px-3 py-2 text-[10px] font-bold text-white dark:bg-amber-500 dark:text-stone-950">+ REGISTRAR</span>
+                    <div><p className="text-xs font-bold text-stone-400">DOMINGO, 13 SET</p><h3 className="mt-1 text-xl font-black tracking-tight sm:text-2xl">Seja bem vindo, Oss!</h3></div>
+                    <a href="/entrar" className="rounded-lg bg-red-700 px-3 py-2 text-[10px] font-bold text-white transition hover:bg-red-800 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400">+ REGISTRAR</a>
                   </div>
                   <div className="mt-5 grid grid-cols-3 gap-2">
                     {[{v:"12",l:"treinos"},{v:"8",l:"técnicas"},{v:"4",l:"semanas"}].map((s) => <div key={s.l} className="rounded-xl bg-stone-50 p-3 dark:bg-white/5"><p className="text-lg font-black">{s.v}</p><p className="text-[9px] font-bold uppercase text-stone-400">{s.l}</p></div>)}
@@ -277,7 +276,7 @@ export function LandingPage() {
                 <p className={`mt-4 min-h-12 text-sm leading-6 ${plan.featured ? "text-red-100 dark:text-stone-300" : "text-stone-600 dark:text-stone-400"}`}>{plan.description}</p>
                 <div className={`my-7 border-t ${plan.featured ? "border-white/20" : "border-stone-200 dark:border-white/10"}`} />
                 <ul className="flex-1 space-y-3.5">{plan.features.map(feature=><li key={feature} className="flex items-start gap-3 text-sm font-semibold"><span className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-full ${plan.featured?"bg-white/15":"bg-red-50 text-red-700 dark:bg-amber-500/10 dark:text-amber-300"}`}><Check className="size-3" /></span>{feature}</li>)}</ul>
-                <Link href={plan.href} className={`mt-8 inline-flex items-center justify-center rounded-xl px-5 py-3.5 text-sm font-extrabold transition hover:-translate-y-0.5 ${plan.featured ? "bg-white text-red-800 hover:bg-red-50 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400" : "border border-stone-300 bg-stone-50 text-stone-900 hover:border-red-300 dark:border-white/12 dark:bg-white/5 dark:text-white dark:hover:border-amber-500/30"}`}>{plan.cta}</Link>
+                <a href={plan.href} className={`mt-8 inline-flex items-center justify-center rounded-xl px-5 py-3.5 text-sm font-extrabold transition hover:-translate-y-0.5 ${plan.featured ? "bg-white text-red-800 hover:bg-red-50 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400" : "border border-stone-300 bg-stone-50 text-stone-900 hover:border-red-300 dark:border-white/12 dark:bg-white/5 dark:text-white dark:hover:border-amber-500/30"}`}>{plan.cta}</a>
               </article>
             ))}
           </div>
@@ -292,7 +291,7 @@ export function LandingPage() {
             <p className="text-xs font-black uppercase tracking-[.18em] text-red-400 dark:text-amber-400">O próximo treino começa agora</p>
             <h2 className="mt-5 text-balance text-4xl font-black tracking-[-.05em] sm:text-6xl">Dê um propósito a cada ida ao tatame.</h2>
             <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-stone-400">Crie sua conta gratuita e faça hoje o primeiro registro da sua evolução.</p>
-            <Link href="/cadastro" className="mt-9 inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-4 font-extrabold text-white transition hover:-translate-y-0.5 hover:bg-red-500 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400">Começar gratuitamente <ArrowRight className="size-4" /></Link>
+            <a href="/cadastro" className="mt-9 inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-4 font-extrabold text-white transition hover:-translate-y-0.5 hover:bg-red-500 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400">Começar gratuitamente <ArrowRight className="size-4" /></a>
           </div>
         </div>
       </section>

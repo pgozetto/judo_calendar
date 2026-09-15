@@ -22,17 +22,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f7f6f2" },
-    { media: "(prefers-color-scheme: dark)", color: "#100e0c" },
-  ],
+  themeColor: "#f7f6f2",
 };
 
 const themeScript = `
   try {
-    const stored = localStorage.getItem('jc-theme');
-    const dark = stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
-    document.documentElement.classList.toggle('dark', dark);
+    document.documentElement.classList.remove('dark');
   } catch (_) {}
 `;
 
