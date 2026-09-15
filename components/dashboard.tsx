@@ -116,6 +116,14 @@ function fromDateKey(key: string) {
   return new Date(year, month - 1, day);
 }
 
+function formatRelativeUpdate(value: string) {
+  const elapsed = Math.max(0, Date.now() - new Date(value).getTime());
+  if (elapsed < 60_000) return "agora";
+  if (elapsed < 3_600_000) return `há ${Math.floor(elapsed / 60_000)} min`;
+  if (elapsed < 86_400_000) return `há ${Math.floor(elapsed / 3_600_000)} h`;
+  return `há ${Math.floor(elapsed / 86_400_000)} d`;
+}
+
 function emptyDraft(date: string): TrainingEntry {
   return { id: null, date, title: "Treino de judô", learned: "", mistakes: "", nextFocus: "", intensity: "Moderado" };
 }

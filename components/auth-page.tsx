@@ -19,6 +19,11 @@ function safeNextPath(value: string | null) {
   return value?.startsWith("/") && !value.startsWith("//") ? value : "/app";
 }
 
+async function prepareWorkspace(supabase: ReturnType<typeof createClient>) {
+  const { data, error } = await supabase.rpc("ensure_user_workspace");
+  return !error && data;
+}
+
 export function AuthPage({ mode, initialMessage = "" }: { mode: "login" | "signup"; initialMessage?: string }) {
   const isSignup = mode === "signup";
   const [showPassword, setShowPassword] = useState(false);
@@ -44,18 +49,35 @@ export function AuthPage({ mode, initialMessage = "" }: { mode: "login" | "signu
           .toLowerCase()
           .replace(/[^a-z0-9_]/g, "_");
 
-        const { data: available, error: usernameError } = await supabase.rpc("is_username_available", {
-          candidate: username,
-        });
-
-        if (usernameError || !available) {
-          setMessage(usernameError ? "Não foi possível validar o usuário agora." : "Este nome de usuário já está em uso.");
-          return;
-        }
-
         const search = new URLSearchParams(window.location.search);
         const selectedPlan = search.get("plano");
         const next = selectedPlan ? `/assinar?plano=${encodeURIComponent(selectedPlan)}` : "/app";
+        const registerResponse = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, email, password, termsAccepted: form.get("terms") === "on" }),
+        });
+        const registerResult = await registerResponse.json().catch(() => ({})) as { code?: string; error?: string };
+
+        if (registerResponse.ok) {
+          const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+          if (error || !data.session) {
+            setMessage("Conta criada. Tente entrar novamente para acessar seu dojo.");
+            return;
+          }
+          if (!(await prepareWorkspace(supabase))) {
+            setMessage("Conta criada, mas ainda estamos preparando seu dojo. Tente entrar novamente em alguns segundos.");
+            return;
+          }
+          window.location.assign(next);
+          return;
+        }
+
+        if (registerResult.code !== "server_not_configured") {
+          setMessage(registerResult.error ?? "Não foi possível criar sua conta agora.");
+          return;
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -71,6 +93,10 @@ export function AuthPage({ mode, initialMessage = "" }: { mode: "login" | "signu
           setSuccess(true);
           setMessage("Conta criada. Confirme o link enviado ao seu e-mail para entrar.");
         } else {
+          if (!(await prepareWorkspace(supabase))) {
+            setMessage("Conta criada, mas ainda estamos preparando seu dojo. Tente entrar novamente em alguns segundos.");
+            return;
+          }
           window.location.assign(next);
           return;
         }
@@ -81,6 +107,10 @@ export function AuthPage({ mode, initialMessage = "" }: { mode: "login" | "signu
         } else if (!data.session) {
           setMessage("A sessão não foi criada. Tente entrar novamente.");
         } else {
+          if (!(await prepareWorkspace(supabase))) {
+            setMessage("Sua sessão foi criada, mas ainda estamos preparando seu dojo. Tente novamente em alguns segundos.");
+            return;
+          }
           const search = new URLSearchParams(window.location.search);
           const destination = safeNextPath(search.get("next"));
           // A navegação completa garante que o servidor receba os cookies da
@@ -142,7 +172,7 @@ export function AuthPage({ mode, initialMessage = "" }: { mode: "login" | "signu
               <span className="mb-2 flex items-center justify-between text-sm font-extrabold">Senha {!isSignup && <a href="/recuperar-senha" className="text-xs text-red-700 hover:underline dark:text-amber-400">Esqueci minha senha</a>}</span>
               <span className="relative block"><LockKeyhole className="pointer-events-none absolute left-4 top-1/2 size-[18px] -translate-y-1/2 text-stone-400" /><input name="password" required minLength={8} type={showPassword ? "text" : "password"} autoComplete={isSignup ? "new-password" : "current-password"} placeholder="Mínimo de 8 caracteres" className="h-13 w-full rounded-xl border border-stone-300 bg-white pl-11 pr-12 text-sm outline-none transition placeholder:text-stone-400 focus:border-red-500 focus:ring-4 focus:ring-red-100 dark:border-white/10 dark:bg-white/5 dark:focus:border-amber-500 dark:focus:ring-amber-500/10" /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 dark:hover:bg-white/5 dark:hover:text-stone-200" aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}>{showPassword ? <EyeOff className="size-[18px]" /> : <Eye className="size-[18px]" />}</button></span>
             </label>
-            {isSignup && <label className="flex items-start gap-3 text-xs leading-5 text-stone-500 dark:text-stone-400"><input required type="checkbox" className="mt-0.5 size-4 rounded accent-red-700 dark:accent-amber-500" />Concordo com os Termos de Uso e a Política de Privacidade do Judo Calendar.</label>}
+            {isSignup && <label className="flex items-start gap-3 text-xs leading-5 text-stone-500 dark:text-stone-400"><input name="terms" required type="checkbox" className="mt-0.5 size-4 rounded accent-red-700 dark:accent-amber-500" />Concordo com os Termos de Uso e a Política de Privacidade do Judo Calendar.</label>}
             {message && <p role="status" aria-live="polite" className={`rounded-xl border px-4 py-3 text-sm font-bold ${success ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300" : "border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"}`}>{message}</p>}
             <button disabled={loading} className="group flex h-13 w-full items-center justify-center gap-2 rounded-xl bg-red-700 text-sm font-extrabold text-white shadow-[0_12px_30px_rgba(185,28,28,.18)] transition hover:bg-red-800 disabled:cursor-wait disabled:opacity-70 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400">{loading ? "Preparando seu dojo..." : isSignup ? "Criar conta grátis" : "Entrar"}<ArrowRight className="size-4 transition-transform group-hover:translate-x-1" /></button>
           </form>
