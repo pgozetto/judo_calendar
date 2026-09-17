@@ -8,7 +8,7 @@ import { ThemeToggle } from "./theme-toggle";
 
 const offers = [
   { id: "pro_monthly" as const, name: "Pró Mensal", price: "R$ 20/mês", description: "Biblioteca, competições e revisões por e-mail.", features: ["Todos os recursos Pró", "Cancele quando quiser", "Alertas de competições"] },
-  { id: "founder_lifetime" as const, name: "Fundador Vitalício", price: "R$ 150", description: "Pagamento único e acesso Pró vitalício.", features: ["Pagamento único", "Atualizações futuras", "Selo de membro fundador"] },
+  { id: "founder_lifetime" as const, name: "Fundador Vitalício", price: "R$ 75", description: "Pagamento único e acesso Pró vitalício.", features: ["Pagamento único", "Atualizações futuras", "Selo de membro fundador"] },
 ];
 
 export function BillingPage({ currentPlan, recurringActive }: { currentPlan: string; recurringActive: boolean }) {

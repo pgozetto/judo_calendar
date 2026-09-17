@@ -102,7 +102,7 @@ const techniqueColors = [
 const paymentPlans = [
   { id: "free" as const, name: "Gratuito", price: "R$ 0", suffix: "", description: "Para começar a registrar sua evolução.", features: ["Calendário de treinos", "Plano de jogo", "Notas livres", "Avisos pré-treino"] },
   { id: "pro_monthly" as const, name: "Pró", price: "R$ 20", suffix: "/mês", description: "O sistema completo para competir melhor.", features: ["Tudo do Gratuito", "Biblioteca de golpes", "Vídeos e imagens", "Revisão semanal por e-mail", "Calendário FPJUDO"] },
-  { id: "founder_lifetime" as const, name: "Vitalício", price: "R$ 150", suffix: " uma vez", description: "Acesso completo, sem mensalidade.", features: ["Todos os recursos Pró", "Pagamento único", "Atualizações futuras", "Selo de membro fundador"] },
+  { id: "founder_lifetime" as const, name: "Vitalício", price: "R$ 75", suffix: " uma vez", description: "Acesso completo, sem mensalidade.", features: ["Todos os recursos Pró", "Pagamento único", "Atualizações futuras", "Selo de membro fundador"] },
 ];
 
 function toDateKey(date: Date) {
@@ -528,14 +528,14 @@ export function Dashboard({ initialData }: { initialData: DashboardInitialData }
               </div>
             ))}
           </nav>
-          <div className="rounded-2xl bg-stone-950 p-4 text-white dark:bg-[#2a2118]">
+          {!initialData.plan.proAccess && <div className="rounded-2xl bg-stone-950 p-4 text-white dark:bg-[#2a2118]">
             <div className="flex items-center gap-2 text-amber-300"><Crown className="size-4" /><span className="text-[10px] font-black uppercase tracking-wider">{initialData.plan.proAccess ? "Seu plano está ativo" : "Libere todo o dojo"}</span></div>
             <p className="mt-2 text-xs leading-5 text-stone-300">{initialData.plan.proAccess ? "Biblioteca, competições e revisões disponíveis." : "Vídeos, biblioteca e revisão semanal."}</p>
             <button type="button" onClick={() => setPricingOpen(true)} className="mt-3 block w-full rounded-lg bg-red-600 px-3 py-2 text-center text-xs font-extrabold transition hover:bg-red-500 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400">{initialData.plan.proAccess ? "Gerenciar plano" : "Conhecer o Pró"}</button>
-          </div>
+          </div>}
           <button type="button" onClick={() => setSettingsOpen(true)} className="group mt-3 flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-stone-100 dark:hover:bg-white/5" aria-label="Abrir configurações da conta">
             <ProfileAvatar profile={profile} />
-            <div className="min-w-0 flex-1"><p className="truncate text-sm font-extrabold">{profile.displayName}</p><p className="truncate text-[11px] text-stone-400">Plano {initialData.plan.name}</p></div>
+            <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-extrabold">{profile.displayName}</p>{initialData.plan.id === "founder_lifetime" && <Crown className="size-4 shrink-0 text-amber-400" aria-label="Fundador Vitalício" />}</div><p className="truncate text-[11px] text-stone-400">Plano {initialData.plan.name}</p></div>
             <Settings className="size-4 text-stone-400 transition group-hover:rotate-45 group-hover:text-red-700 dark:group-hover:text-amber-400" />
           </button>
         </div>

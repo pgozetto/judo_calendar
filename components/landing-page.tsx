@@ -81,7 +81,7 @@ const plans = [
   },
   {
     name: "Vitalício",
-    price: "R$ 150",
+    price: "R$ 75",
     suffix: "uma vez",
     description: "Acesso completo, sem mensalidade.",
     features: ["Todos os recursos Pró", "Pagamento único", "Atualizações futuras", "Selo de membro fundador"],

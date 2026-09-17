@@ -564,7 +564,7 @@ insert into public.subscription_plans (id, name, description, price_cents, inter
 values
   ('free', 'Gratuito', 'Diário, calendário, plano de jogo e notas.', 0, 'free', false),
   ('pro_monthly', 'Pró Mensal', 'Biblioteca, competições e revisões por e-mail.', 2000, 'month', true),
-  ('founder_lifetime', 'Fundador Vitalício', 'Acesso vitalício aos recursos Pró.', 15000, 'lifetime', true)
+  ('founder_lifetime', 'Fundador Vitalício', 'Acesso vitalício aos recursos Pró.', 7500, 'lifetime', true)
 on conflict (id) do update set
   name = excluded.name,
   description = excluded.description,
