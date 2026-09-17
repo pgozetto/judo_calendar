@@ -82,6 +82,7 @@ export default async function AppPage() {
 
   const planId = subscriptionResult.data?.plan_id ?? "free";
   const planData = (plansResult.data ?? []).find((plan) => plan.id === planId);
+  const proAccess = Boolean(subscriptionResult.data?.lifetime_access || planData?.pro_access);
   const gamePlan = gamePlanResult.data;
   const trainingSchedule = trainingScheduleResult.data;
   const reviewSchedule = reviewScheduleResult.data;
@@ -145,7 +146,7 @@ export default async function AppPage() {
       createdAt: notification.created_at,
       readAt: notification.read_at,
     })),
-    plan: { id: planData?.id ?? "free", name: planData?.name ?? "Gratuito", proAccess: planData?.pro_access ?? false },
+    plan: { id: planData?.id ?? planId, name: planData?.name ?? "Gratuito", proAccess },
   };
 
   return <Dashboard initialData={initialData} />;

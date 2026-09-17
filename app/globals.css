@@ -101,6 +101,34 @@ select:focus-visible {
   background: #57534e;
 }
 
+@media (max-width: 639px) {
+  [role="dialog"] button[aria-label^="Fechar"]:not(.absolute) {
+    display: inline-flex !important;
+    width: auto !important;
+    height: 2.5rem !important;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    padding: 0 0.75rem !important;
+    font-size: 0.75rem;
+    font-weight: 800;
+  }
+
+  [role="dialog"] button[aria-label^="Fechar"]:not(.absolute)::before {
+    content: "‹";
+    font-size: 1.35rem;
+    line-height: 1;
+  }
+
+  [role="dialog"] button[aria-label^="Fechar"]:not(.absolute)::after {
+    content: "Voltar";
+  }
+
+  [role="dialog"] button[aria-label^="Fechar"]:not(.absolute) > svg {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
