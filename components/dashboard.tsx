@@ -126,7 +126,7 @@ function formatRelativeUpdate(value: string) {
 }
 
 function emptyDraft(date: string): TrainingEntry {
-  return { id: null, date, title: "Treino de judô", learned: "", mistakes: "", nextFocus: "", intensity: "Moderado" };
+  return { id: null, date, title: "Treino de judô", learned: "", mistakes: "", nextFocus: "", intensity: "Moderado", mediaPath: null, mediaType: null, mediaUrl: null };
 }
 
 function calendarCells(month: Date) {
@@ -194,6 +194,10 @@ export function Dashboard({ initialData }: { initialData: DashboardInitialData }
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
   const [draft, setDraft] = useState<TrainingEntry>(() => emptyDraft(toDateKey(new Date())));
   const [editorOpen, setEditorOpen] = useState(false);
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [mediaRemoved, setMediaRemoved] = useState(false);
+  const [mediaError, setMediaError] = useState("");
+  const [savingTraining, setSavingTraining] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
   const [gamePlan, setGamePlan] = useState<GamePlanDraft>(initialData.gamePlan);
   const [notes, setNotes] = useState<FreeNote[]>(initialData.notes);
@@ -237,30 +241,92 @@ export function Dashboard({ initialData }: { initialData: DashboardInitialData }
     const existing = entries.find((entry) => entry.date === dateKey);
     setSelectedDate(dateKey);
     setDraft(existing ? { ...existing } : emptyDraft(dateKey));
+    setMediaFile(null);
+    setMediaRemoved(false);
+    setMediaError("");
     setEditorOpen(true);
+  }
+
+  function selectTrainingMedia(file: File | null) {
+    if (!file) return;
+    if (!initialData.plan.proAccess) {
+      setMediaError("As mídias estão disponíveis apenas no plano Pró.");
+      return;
+    }
+    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+      setMediaError("Escolha uma imagem ou vídeo válido.");
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setMediaError("O arquivo precisa ter no máximo 50 MB.");
+      return;
+    }
+    setMediaFile(file);
+    setMediaRemoved(false);
+    setMediaError("");
+  }
+
+  function removeTrainingMedia() {
+    setMediaFile(null);
+    setMediaRemoved(Boolean(draft.mediaPath));
+    setMediaError("");
   }
 
   async function saveTraining(event: FormEvent) {
     event.preventDefault();
-    const { data, error } = await supabase.from("training_records").upsert({
-      user_id: initialData.userId,
-      training_date: draft.date,
-      title: draft.title.trim(),
-      learned: draft.learned.trim(),
-      mistakes: draft.mistakes.trim(),
-      next_focus: draft.nextFocus.trim(),
-      intensity: intensityValues[draft.intensity],
-    }, { onConflict: "user_id,training_date" }).select("*").single();
+    setSavingTraining(true);
+    let uploadedPath: string | null = null;
 
-    if (error || !data) {
-      flashSaved("Não foi possível salvar o treino");
-      return;
+    try {
+      let mediaPath = mediaRemoved ? null : draft.mediaPath;
+      let mediaType = mediaRemoved ? null : draft.mediaType;
+
+      if (mediaFile) {
+        const extension = mediaFile.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || (mediaFile.type.startsWith("video/") ? "mp4" : "jpg");
+        uploadedPath = `${initialData.userId}/${draft.date}/${crypto.randomUUID()}.${extension}`;
+        const uploadResult = await supabase.storage.from("training-media").upload(uploadedPath, mediaFile, {
+          cacheControl: "3600",
+          contentType: mediaFile.type,
+          upsert: false,
+        });
+        if (uploadResult.error) throw new Error("Não foi possível enviar a mídia. Tente novamente.");
+        mediaPath = uploadedPath;
+        mediaType = mediaFile.type;
+      }
+
+      const { data, error } = await supabase.from("training_records").upsert({
+        user_id: initialData.userId,
+        training_date: draft.date,
+        title: draft.title.trim(),
+        learned: draft.learned.trim(),
+        mistakes: draft.mistakes.trim(),
+        next_focus: draft.nextFocus.trim(),
+        intensity: intensityValues[draft.intensity],
+        media_path: mediaPath,
+        media_type: mediaType,
+      }, { onConflict: "user_id,training_date" }).select("*").single();
+
+      if (error || !data) throw new Error("Não foi possível salvar o treino. Tente novamente.");
+
+      if (draft.mediaPath && draft.mediaPath !== mediaPath) {
+        await supabase.storage.from("training-media").remove([draft.mediaPath]);
+      }
+
+      const signedUrl = mediaPath
+        ? (await supabase.storage.from("training-media").createSignedUrl(mediaPath, 3600)).data?.signedUrl ?? null
+        : null;
+      const saved: TrainingEntry = { ...draft, id: data.id, mediaPath: data.media_path, mediaType: data.media_type, mediaUrl: signedUrl };
+      setEntries((current) => [...current.filter((entry) => entry.date !== draft.date), saved].sort((a, b) => b.date.localeCompare(a.date)));
+      setMediaFile(null);
+      setMediaRemoved(false);
+      setEditorOpen(false);
+      flashSaved("Treino registrado com sucesso");
+    } catch (error) {
+      if (uploadedPath) await supabase.storage.from("training-media").remove([uploadedPath]);
+      flashSaved(error instanceof Error ? error.message : "Não foi possível salvar o treino");
+    } finally {
+      setSavingTraining(false);
     }
-
-    const saved: TrainingEntry = { ...draft, id: data.id };
-    setEntries((current) => [...current.filter((entry) => entry.date !== draft.date), saved]);
-    setEditorOpen(false);
-    flashSaved("Treino registrado com sucesso");
   }
 
   async function deleteTraining() {
@@ -269,7 +335,11 @@ export function Dashboard({ initialData }: { initialData: DashboardInitialData }
       flashSaved("Não foi possível remover o registro");
       return;
     }
+    const mediaPath = entries.find((entry) => entry.date === selectedDate)?.mediaPath;
+    if (mediaPath) await supabase.storage.from("training-media").remove([mediaPath]);
     setEntries((current) => current.filter((entry) => entry.date !== selectedDate));
+    setMediaFile(null);
+    setMediaRemoved(false);
     setEditorOpen(false);
     flashSaved("Registro removido");
   }
@@ -567,7 +637,7 @@ export function Dashboard({ initialData }: { initialData: DashboardInitialData }
         <button onClick={() => openTrainingEditor()} className="grid size-11 place-items-center rounded-xl bg-red-700 text-white shadow-lg dark:bg-amber-500 dark:text-stone-950" aria-label="Registrar treino"><Plus className="size-5" /></button>
       </div>
 
-      {editorOpen && <TrainingEditor draft={draft} setDraft={setDraft} exists={entries.some(entry => entry.date === selectedDate)} onClose={() => setEditorOpen(false)} onSave={saveTraining} onDelete={deleteTraining} />}
+      {editorOpen && <TrainingEditor draft={draft} setDraft={setDraft} exists={entries.some(entry => entry.date === selectedDate)} isPro={initialData.plan.proAccess} mediaFile={mediaFile} mediaError={mediaError} saving={savingTraining} onMediaSelect={selectTrainingMedia} onRemoveMedia={removeTrainingMedia} onClose={() => setEditorOpen(false)} onSave={saveTraining} onDelete={deleteTraining} />}
       {noteModalOpen && <NoteModal note={editingNote} onClose={() => { setNoteModalOpen(false); setEditingNote(null); }} onSave={saveNote} onDelete={deleteNote} />}
       {scheduleOpen && <TrainingScheduleModal schedule={trainingSchedule} onClose={() => setScheduleOpen(false)} onSave={saveTrainingSchedule} />}
       {reviewOpen && <ReviewScheduleModal schedule={reviewSchedule} onClose={() => setReviewOpen(false)} onSave={saveReviewSchedule} />}
@@ -673,6 +743,7 @@ function MetricCard({ icon: Icon, value, label, detail, tone, onClick }: { icon:
 
 function CalendarView({ cells, month, entries, todayKey, onMonthChange, onSelect }: { cells: ReturnType<typeof calendarCells>; month: Date; entries: TrainingEntry[]; todayKey: string; onMonthChange: (date: Date) => void; onSelect: (key: string) => void }) {
   const monthLabel = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(month);
+  const orderedEntries = [...entries].sort((a, b) => b.date.localeCompare(a.date));
   function shiftMonth(amount: number) { onMonthChange(new Date(month.getFullYear(), month.getMonth() + amount, 1)); }
   return (
     <div>
@@ -681,10 +752,14 @@ function CalendarView({ cells, month, entries, todayKey, onMonthChange, onSelect
         <div className="flex items-center justify-between border-b border-stone-100 p-4 sm:p-6 dark:border-white/8"><button onClick={() => shiftMonth(-1)} className="grid size-10 place-items-center rounded-xl border border-stone-200 hover:bg-stone-50 dark:border-white/10 dark:hover:bg-white/5" aria-label="Mês anterior"><ChevronLeft className="size-5" /></button><div className="text-center"><h3 className="text-lg font-black capitalize sm:text-xl">{monthLabel}</h3><button onClick={() => onMonthChange(new Date())} className="mt-1 text-[10px] font-black uppercase tracking-wider text-red-700 dark:text-amber-400">Voltar para hoje</button></div><button onClick={() => shiftMonth(1)} className="grid size-10 place-items-center rounded-xl border border-stone-200 hover:bg-stone-50 dark:border-white/10 dark:hover:bg-white/5" aria-label="Próximo mês"><ChevronRight className="size-5" /></button></div>
         <div className="grid grid-cols-7 border-b border-stone-100 dark:border-white/8">{["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map(day=><div key={day} className="py-3 text-center text-[9px] font-black uppercase tracking-wider text-stone-400 sm:text-[11px]">{day}</div>)}</div>
         <div className="grid grid-cols-7">
-          {cells.map(({date,current}) => { const key=toDateKey(date); const entry=entries.find(item=>item.date===key); const today=key===todayKey; return <button key={key} onClick={()=>onSelect(key)} className={`group relative min-h-[72px] border-b border-r border-stone-100 p-1.5 text-left transition hover:bg-red-50/60 sm:min-h-[112px] sm:p-3 dark:border-white/7 dark:hover:bg-amber-500/[.05] ${!current?"bg-stone-50/60 text-stone-300 dark:bg-white/[.015] dark:text-stone-600":""}`}><span className={`grid size-7 place-items-center rounded-lg text-xs font-bold sm:size-8 sm:text-sm ${today?"bg-red-700 text-white dark:bg-amber-500 dark:text-stone-950":""}`}>{date.getDate()}</span>{entry&&<div className="mt-1 sm:mt-2"><span className="mx-auto block size-1.5 rounded-full bg-red-600 sm:hidden dark:bg-amber-400" /><div className="hidden rounded-lg border border-red-100 bg-red-50 px-2 py-1.5 sm:block dark:border-amber-500/15 dark:bg-amber-500/[.06]"><p className="truncate text-[10px] font-black text-red-800 dark:text-amber-300">{entry.title}</p><p className="mt-0.5 truncate text-[9px] text-stone-400">{entry.intensity}</p></div></div>}<Plus className="absolute bottom-2 right-2 hidden size-3.5 text-red-600 opacity-0 transition group-hover:opacity-100 sm:block dark:text-amber-400" /></button>; })}
+          {cells.map(({date,current}) => { const key=toDateKey(date); const entry=orderedEntries.find(item=>item.date===key); const today=key===todayKey; return <button key={key} onClick={()=>onSelect(key)} className={`group relative min-h-[72px] border-b border-r border-stone-100 p-1.5 text-left transition hover:bg-red-50/60 sm:min-h-[112px] sm:p-3 dark:border-white/7 dark:hover:bg-amber-500/[.05] ${!current?"bg-stone-50/60 text-stone-300 dark:bg-white/[.015] dark:text-stone-600":""}`}><span className={`grid size-7 place-items-center rounded-lg text-xs font-bold sm:size-8 sm:text-sm ${today?"bg-red-700 text-white dark:bg-amber-500 dark:text-stone-950":""}`}>{date.getDate()}</span>{entry&&<div className="mt-1 sm:mt-2"><span className="mx-auto block size-1.5 rounded-full bg-red-600 sm:hidden dark:bg-amber-400" /><div className="hidden rounded-lg border border-red-100 bg-red-50 px-2 py-1.5 sm:block dark:border-amber-500/15 dark:bg-amber-500/[.06]"><p className="truncate text-[10px] font-black text-red-800 dark:text-amber-300">{entry.title}</p><p className="mt-0.5 truncate text-[9px] text-stone-400">{entry.intensity}</p></div></div>}<Plus className="absolute bottom-2 right-2 hidden size-3.5 text-red-600 opacity-0 transition group-hover:opacity-100 sm:block dark:text-amber-400" /></button>; })}
         </div>
       </section>
       <div className="mt-4 flex flex-wrap gap-4 text-xs font-semibold text-stone-400"><span className="flex items-center gap-2"><i className="size-2 rounded-full bg-red-600 dark:bg-amber-400" /> Treino registrado</span><span className="flex items-center gap-2"><i className="size-2 rounded-full border border-stone-300" /> Sem registro</span></div>
+      <section className="mt-5 overflow-hidden rounded-[24px] border border-stone-200 bg-white dark:border-white/8 dark:bg-white/[.035]">
+        <div className="flex items-center justify-between border-b border-stone-100 p-4 sm:p-6 dark:border-white/8"><div><h3 className="font-black">Histórico completo</h3><p className="mt-1 text-xs text-stone-400">Todos os treinos ficam disponíveis aqui, inclusive os de semanas anteriores.</p></div><span className="rounded-full bg-stone-100 px-3 py-1 text-[10px] font-black text-stone-500 dark:bg-white/8 dark:text-stone-300">{orderedEntries.length} {orderedEntries.length === 1 ? "registro" : "registros"}</span></div>
+        {orderedEntries.length > 0 ? <div className="divide-y divide-stone-100 dark:divide-white/7">{orderedEntries.map((entry) => <button key={entry.date} type="button" onClick={() => onSelect(entry.date)} className="group flex w-full items-center gap-3 p-4 text-left transition hover:bg-stone-50 sm:gap-4 sm:px-6 dark:hover:bg-white/5"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-red-50 text-sm font-black text-red-700 dark:bg-amber-500/10 dark:text-amber-300">{fromDateKey(entry.date).getDate()}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-extrabold">{entry.title}</span><span className="mt-1 block truncate text-xs text-stone-400">{new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" }).format(fromDateKey(entry.date))} · Foco: {entry.nextFocus}</span></span>{entry.mediaPath && <ImagePlus className="size-4 shrink-0 text-emerald-600 dark:text-emerald-300" aria-label="Tem mídia anexada" />}<span className="hidden rounded-md bg-stone-100 px-2 py-1 text-[9px] font-bold text-stone-500 sm:block dark:bg-white/5 dark:text-stone-400">{entry.intensity}</span><ChevronRight className="size-4 shrink-0 text-stone-300 transition group-hover:translate-x-1" /></button>)}</div> : <div className="p-8 text-center text-sm text-stone-400">Nenhum treino registrado ainda.</div>}
+      </section>
     </div>
   );
 }
@@ -736,9 +811,9 @@ function CompetitionsView({ events, todayKey, proAccess, onSelect }: { events: C
 
 function Paywall({title,text}:{title:string;text:string}) { return <section className="mt-5 flex flex-col items-start justify-between gap-5 rounded-[22px] border border-amber-200 bg-amber-50 p-5 sm:flex-row sm:items-center sm:p-6 dark:border-amber-500/15 dark:bg-amber-500/[.05]"><div className="flex items-start gap-4"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-amber-400 text-stone-950"><Crown className="size-5" /></span><div><h3 className="font-black">{title}</h3><p className="mt-1 max-w-2xl text-sm leading-6 text-stone-600 dark:text-stone-400">{text}</p></div></div><button type="button" onClick={() => window.location.assign("/#planos")} className="w-full shrink-0 rounded-xl bg-stone-950 px-5 py-3 text-center text-sm font-extrabold text-white sm:w-auto dark:bg-amber-500 dark:text-stone-950">Ver planos</button></section> }
 
-function TrainingEditor({ draft, setDraft, exists, onClose, onSave, onDelete }: { draft: TrainingEntry; setDraft: (draft: TrainingEntry) => void; exists: boolean; onClose: () => void; onSave: (event: FormEvent) => void; onDelete: () => void }) {
+function TrainingEditor({ draft, setDraft, exists, isPro, mediaFile, mediaError, saving, onMediaSelect, onRemoveMedia, onClose, onSave, onDelete }: { draft: TrainingEntry; setDraft: (draft: TrainingEntry) => void; exists: boolean; isPro: boolean; mediaFile: File | null; mediaError: string; saving: boolean; onMediaSelect: (file: File | null) => void; onRemoveMedia: () => void; onClose: () => void; onSave: (event: FormEvent) => void; onDelete: () => void }) {
   const date = fromDateKey(draft.date);
-  return <div className="fixed inset-0 z-[60] flex justify-end bg-black/35 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="training-title"><button className="absolute inset-0" onClick={onClose} aria-label="Fechar registro" /><div className="app-scrollbar relative h-full w-full max-w-[560px] overflow-y-auto bg-[#fbfaf7] p-5 shadow-2xl sm:p-7 dark:bg-[#171310]"><div className="flex items-start justify-between"><div><p className="text-xs font-black uppercase tracking-[.14em] text-red-700 dark:text-amber-400">Diário de treino</p><h2 id="training-title" className="mt-2 text-2xl font-black tracking-tight">{exists?"Rever treino":"Novo registro"}</h2><p className="mt-1 text-sm capitalize text-stone-400">{new Intl.DateTimeFormat("pt-BR",{weekday:"long",day:"2-digit",month:"long",year:"numeric"}).format(date)}</p></div><button onClick={onClose} className="grid size-10 place-items-center rounded-xl border border-stone-200 bg-white dark:border-white/8 dark:bg-white/5" aria-label="Fechar"><X className="size-5" /></button></div><form onSubmit={onSave} className="mt-7 space-y-5"><label className="block"><span className="mb-2 block text-sm font-black">Tipo de treino</span><input required value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})} className="h-12 w-full rounded-xl border border-stone-200 bg-white px-4 text-sm outline-none focus:border-red-400 dark:border-white/8 dark:bg-white/5 dark:focus:border-amber-500" /></label><div><span className="mb-2 block text-sm font-black">Intensidade</span><div className="grid grid-cols-3 gap-2">{(["Leve","Moderado","Forte"] as const).map(level=><button key={level} type="button" onClick={()=>setDraft({...draft,intensity:level})} className={`rounded-xl border px-3 py-3 text-xs font-extrabold ${draft.intensity===level?"border-red-600 bg-red-50 text-red-700 dark:border-amber-500 dark:bg-amber-500/10 dark:text-amber-300":"border-stone-200 bg-white text-stone-500 dark:border-white/8 dark:bg-white/5"}`}>{level}</button>)}</div></div><TrainingField label="O que aprendi?" hint="Técnicas, conceitos ou detalhes novos" value={draft.learned} onChange={value=>setDraft({...draft,learned:value})} /><TrainingField label="Onde errei?" hint="Seja específico, mas não se julgue" value={draft.mistakes} onChange={value=>setDraft({...draft,mistakes:value})} /><TrainingField label="Foco para o próximo treino" hint="Escolha uma ação clara e simples" value={draft.nextFocus} onChange={value=>setDraft({...draft,nextFocus:value})} /><div><div className="flex items-center justify-between"><span className="text-sm font-black">Mídias</span><span className="rounded-md bg-amber-100 px-2 py-1 text-[8px] font-black text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">PRÓ</span></div><button type="button" className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-stone-300 bg-stone-50 py-5 text-xs font-bold text-stone-400 dark:border-white/10 dark:bg-white/[.025]"><ImagePlus className="size-5" /> Adicionar vídeo ou imagem</button></div><div className="flex items-center justify-between gap-3 border-t border-stone-200 pt-5 dark:border-white/8">{exists?<button type="button" onClick={onDelete} className="grid size-11 place-items-center rounded-xl border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/20 dark:hover:bg-red-500/10" aria-label="Excluir registro"><Trash2 className="size-4" /></button>:<span />}<div className="flex gap-2"><button type="button" onClick={onClose} className="rounded-xl border border-stone-200 px-4 py-3 text-sm font-bold dark:border-white/10">Cancelar</button><button className="flex items-center gap-2 rounded-xl bg-red-700 px-5 py-3 text-sm font-extrabold text-white dark:bg-amber-500 dark:text-stone-950"><Save className="size-4" /> Salvar treino</button></div></div></form></div></div>;
+  return <div className="fixed inset-0 z-[60] flex justify-end bg-black/35 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="training-title"><button className="absolute inset-0" onClick={onClose} aria-label="Fechar registro" /><div className="app-scrollbar relative h-full w-full max-w-[560px] overflow-y-auto bg-[#fbfaf7] p-5 shadow-2xl sm:p-7 dark:bg-[#171310]"><div className="flex items-start justify-between"><div><p className="text-xs font-black uppercase tracking-[.14em] text-red-700 dark:text-amber-400">Diário de treino</p><h2 id="training-title" className="mt-2 text-2xl font-black tracking-tight">{exists?"Rever treino":"Novo registro"}</h2><p className="mt-1 text-sm capitalize text-stone-400">{new Intl.DateTimeFormat("pt-BR",{weekday:"long",day:"2-digit",month:"long",year:"numeric"}).format(date)}</p></div><button type="button" onClick={onClose} className="grid size-10 place-items-center rounded-xl border border-stone-200 bg-white dark:border-white/8 dark:bg-white/5" aria-label="Fechar"><X className="size-5" /></button></div><form onSubmit={onSave} className="mt-7 space-y-5"><label className="block"><span className="mb-2 block text-sm font-black">Tipo de treino</span><input required value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})} className="h-12 w-full rounded-xl border border-stone-200 bg-white px-4 text-sm outline-none focus:border-red-400 dark:border-white/8 dark:bg-white/5 dark:focus:border-amber-500" /></label><div><span className="mb-2 block text-sm font-black">Intensidade</span><div className="grid grid-cols-3 gap-2">{(["Leve","Moderado","Forte"] as const).map(level=><button key={level} type="button" onClick={()=>setDraft({...draft,intensity:level})} className={`rounded-xl border px-3 py-3 text-xs font-extrabold ${draft.intensity===level?"border-red-600 bg-red-50 text-red-700 dark:border-amber-500 dark:bg-amber-500/10 dark:text-amber-300":"border-stone-200 bg-white text-stone-500 dark:border-white/8 dark:bg-white/5"}`}>{level}</button>)}</div></div><TrainingField label="O que aprendi?" hint="Técnicas, conceitos ou detalhes novos" value={draft.learned} onChange={value=>setDraft({...draft,learned:value})} /><TrainingField label="Onde errei?" hint="Seja específico, mas não se julgue" value={draft.mistakes} onChange={value=>setDraft({...draft,mistakes:value})} /><TrainingField label="Foco para o próximo treino" hint="Escolha uma ação clara e simples" value={draft.nextFocus} onChange={value=>setDraft({...draft,nextFocus:value})} /><div><div className="flex items-center justify-between"><span className="text-sm font-black">Mídias</span><span className="rounded-md bg-amber-100 px-2 py-1 text-[8px] font-black text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">PRÓ</span></div>{draft.mediaUrl && !mediaFile && <div className="mt-2 overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-white/8 dark:bg-white/5">{draft.mediaType?.startsWith("video/") ? <video src={draft.mediaUrl} controls className="max-h-56 w-full object-contain" /> : <img src={draft.mediaUrl} alt="Mídia anexada ao treino" className="max-h-56 w-full object-contain" />}<button type="button" onClick={onRemoveMedia} className="w-full border-t border-stone-200 px-3 py-2 text-xs font-bold text-red-700 dark:border-white/8 dark:text-red-300">Remover mídia</button></div>}{mediaFile && <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs dark:border-emerald-500/20 dark:bg-emerald-500/10"><span className="min-w-0 truncate font-bold text-emerald-800 dark:text-emerald-200">Selecionado: {mediaFile.name}</span><button type="button" onClick={onRemoveMedia} className="shrink-0 font-black text-red-700 dark:text-red-300">Remover</button></div>}<input id="training-media" type="file" accept="image/*,video/*" className="sr-only" disabled={!isPro} onChange={(event)=>{onMediaSelect(event.target.files?.[0] ?? null); event.currentTarget.value="";}} /><label htmlFor="training-media" className={`mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-stone-300 bg-stone-50 py-5 text-xs font-bold text-stone-500 dark:border-white/10 dark:bg-white/[.025] dark:text-stone-300 ${!isPro?"cursor-not-allowed opacity-60":"cursor-pointer hover:border-red-300 hover:text-red-700 dark:hover:border-amber-500/40 dark:hover:text-amber-300"}`}><ImagePlus className="size-5" />{isPro?"Adicionar vídeo ou imagem":"Disponível no plano Pró"}</label>{mediaError&&<p className="mt-2 text-xs font-bold text-red-700 dark:text-red-300">{mediaError}</p>}<p className="mt-2 text-[10px] text-stone-400">Imagem ou vídeo de até 50 MB.</p></div><div className="flex items-center justify-between gap-3 border-t border-stone-200 pt-5 dark:border-white/8">{exists?<button type="button" onClick={onDelete} disabled={saving} className="grid size-11 place-items-center rounded-xl border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-500/20 dark:hover:bg-red-500/10" aria-label="Excluir registro"><Trash2 className="size-4" /></button>:<span />}<div className="flex gap-2"><button type="button" onClick={onClose} disabled={saving} className="rounded-xl border border-stone-200 px-4 py-3 text-sm font-bold disabled:opacity-50 dark:border-white/10">Cancelar</button><button type="submit" disabled={saving} className="flex items-center gap-2 rounded-xl bg-red-700 px-5 py-3 text-sm font-extrabold text-white disabled:cursor-wait disabled:opacity-60 dark:bg-amber-500 dark:text-stone-950"><Save className="size-4" /> {saving?"Salvando...":"Salvar treino"}</button></div></div></form></div></div>;
 }
 
 function TrainingField({label,hint,value,onChange}:{label:string;hint:string;value:string;onChange:(value:string)=>void}) { return <label className="block"><span className="text-sm font-black">{label}</span><span className="mt-1 block text-[11px] text-stone-400">{hint}</span><textarea required value={value} onChange={e=>onChange(e.target.value)} rows={4} className="mt-2 w-full resize-none rounded-xl border border-stone-200 bg-white p-4 text-sm leading-6 outline-none focus:border-red-400 focus:ring-4 focus:ring-red-100 dark:border-white/8 dark:bg-white/5 dark:focus:border-amber-500 dark:focus:ring-amber-500/10" /></label> }

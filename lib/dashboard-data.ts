@@ -6,6 +6,9 @@ export type TrainingEntry = {
   mistakes: string;
   nextFocus: string;
   intensity: "Leve" | "Moderado" | "Forte";
+  mediaPath: string | null;
+  mediaType: string | null;
+  mediaUrl: string | null;
 };
 
 export type FreeNote = {

@@ -42,6 +42,8 @@ export type Database = {
           mistakes: string;
           next_focus: string;
           intensity: Database["public"]["Enums"]["training_intensity"];
+          media_path: string | null;
+          media_type: string | null;
         };
         Insert: {
           id?: string;
@@ -52,6 +54,8 @@ export type Database = {
           mistakes?: string;
           next_focus?: string;
           intensity?: Database["public"]["Enums"]["training_intensity"];
+          media_path?: string | null;
+          media_type?: string | null;
           created_at?: string;
           updated_at?: string;
         };

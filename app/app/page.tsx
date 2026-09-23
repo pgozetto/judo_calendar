@@ -89,6 +89,24 @@ export default async function AppPage() {
   const trainingSchedule = trainingScheduleResult.data;
   const reviewSchedule = reviewScheduleResult.data;
   const preferences = preferencesResult.data;
+  const entries = await Promise.all((entriesResult.data ?? []).map(async (entry) => {
+    const signedUrl = entry.media_path
+      ? (await supabase.storage.from("training-media").createSignedUrl(entry.media_path, 3600)).data?.signedUrl ?? null
+      : null;
+
+    return {
+      id: entry.id,
+      date: entry.training_date,
+      title: entry.title,
+      learned: entry.learned,
+      mistakes: entry.mistakes,
+      nextFocus: entry.next_focus,
+      intensity: intensityLabels[entry.intensity],
+      mediaPath: entry.media_path,
+      mediaType: entry.media_type,
+      mediaUrl: signedUrl,
+    };
+  }));
 
   const initialData: DashboardInitialData = {
     userId,
@@ -98,15 +116,7 @@ export default async function AppPage() {
       email: profile.email,
       photo: profile.avatar_url,
     },
-    entries: (entriesResult.data ?? []).map((entry) => ({
-      id: entry.id,
-      date: entry.training_date,
-      title: entry.title,
-      learned: entry.learned,
-      mistakes: entry.mistakes,
-      nextFocus: entry.next_focus,
-      intensity: intensityLabels[entry.intensity],
-    })),
+    entries,
     gamePlan: {
       objective: gamePlan?.objective ?? "",
       grip: gamePlan?.grip ?? "",
