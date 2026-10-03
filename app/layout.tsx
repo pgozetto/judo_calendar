@@ -22,12 +22,16 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#f7f6f2",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f7f6f2" },
+    { media: "(prefers-color-scheme: dark)", color: "#100e0c" },
+  ],
 };
 
+// Claro por padrão; respeita a escolha salva pelo botão de tema.
 const themeScript = `
   try {
-    document.documentElement.classList.remove('dark');
+    document.documentElement.classList.toggle('dark', localStorage.getItem('jc-theme') === 'dark');
   } catch (_) {}
 `;
 
@@ -35,7 +39,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="pt-BR" data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {/* Extensões de navegador (ex.: bloqueadores de anúncio) alteram este script antes da hidratação. */}
+        <script suppressHydrationWarning dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>{children}</body>
     </html>

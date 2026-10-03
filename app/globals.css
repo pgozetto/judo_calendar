@@ -15,8 +15,35 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: "Segoe UI Variable Text", "Inter", "Segoe UI", sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased;
+  caret-color: #b91c1c;
+}
+
+::selection {
+  background: #fecaca;
+  color: #450a0a;
+}
+
+.dark body {
+  caret-color: #f59e0b;
+}
+
+.dark ::selection {
+  background: #78350f;
+  color: #fffbeb;
+}
+
+a {
+  text-underline-offset: 3px;
+}
+
+html {
+  scrollbar-color: #d6d3d1 transparent;
+}
+
+.dark {
+  scrollbar-color: #44403c transparent;
 }
 
 button,

@@ -1,7 +1,7 @@
-export function Brand({ compact = false, href = "/" }: { compact?: boolean; href?: string }) {
+export function Brand({ compact = false, href = "/", onDark = false }: { compact?: boolean; href?: string; onDark?: boolean }) {
   return (
     <a href={href} className="group inline-flex items-center gap-3" aria-label="Judo Calendar">
-      <span className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-red-500 to-red-800 shadow-[0_8px_24px_rgba(185,28,28,.24)] ring-1 ring-black/10 transition-transform group-hover:-rotate-3 dark:from-red-600 dark:to-red-950">
+      <span className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-red-500 to-red-800 ring-1 ring-black/10 transition-transform group-hover:-rotate-3 dark:from-red-600 dark:to-red-950">
         <svg viewBox="0 0 40 40" className="size-9" aria-hidden="true">
           <rect x="5.5" y="8" width="29" height="27" rx="5.5" fill="#fffdf8" stroke="#181411" strokeWidth="1.8" />
           <path d="M6.5 15.5h27" stroke="#181411" strokeWidth="1.8" />
@@ -11,8 +11,8 @@ export function Brand({ compact = false, href = "/" }: { compact?: boolean; href
         </svg>
       </span>
       {!compact && (
-        <span className="text-[17px] font-extrabold tracking-[-0.035em] text-stone-950 dark:text-stone-50">
-          Judo <span className="text-red-700 dark:text-amber-400">Calendar</span>
+        <span className={`text-[17px] font-extrabold tracking-[-0.035em] ${onDark ? "text-white" : "text-stone-950 dark:text-stone-50"}`}>
+          Judo <span className={onDark ? "text-red-400 dark:text-amber-400" : "text-red-700 dark:text-amber-400"}>Calendar</span>
         </span>
       )}
     </a>

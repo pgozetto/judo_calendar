@@ -1,9 +1,11 @@
 "use client";
 
 import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, LockKeyhole, Mail, UserRound } from "lucide-react";
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { Brand } from "./brand";
 import { ThemeToggle } from "./theme-toggle";
+import { safeNextPath } from "@/lib/safe-path";
 import { createClient } from "@/lib/supabase/client";
 
 function authErrorMessage(message: string) {
@@ -13,10 +15,6 @@ function authErrorMessage(message: string) {
   if (normalized.includes("password")) return "Use uma senha com pelo menos 8 caracteres.";
   if (normalized.includes("rate limit") || normalized.includes("too many requests")) return "O limite de e-mails foi atingido. Aguarde alguns minutos ou tente com outro e-mail.";
   return "Não foi possível concluir. Confira os dados e tente novamente.";
-}
-
-function safeNextPath(value: string | null) {
-  return value?.startsWith("/") && !value.startsWith("//") ? value : "/app";
 }
 
 async function prepareWorkspace(supabase: ReturnType<typeof createClient>) {
@@ -128,32 +126,29 @@ export function AuthPage({ mode, initialMessage = "" }: { mode: "login" | "signu
 
   return (
     <main className="grid min-h-screen bg-[#f7f6f2] text-stone-950 dark:bg-[#100e0c] dark:text-stone-50 lg:grid-cols-[.9fr_1.1fr]">
-      <section className="relative hidden overflow-hidden bg-stone-950 p-10 text-white lg:flex lg:flex-col lg:justify-between dark:bg-[#251c15]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(220,38,38,.35),transparent_34%),radial-gradient(circle_at_85%_85%,rgba(145,25,30,.27),transparent_38%)] dark:bg-[radial-gradient(circle_at_15%_10%,rgba(217,163,55,.22),transparent_34%),radial-gradient(circle_at_85%_85%,rgba(103,67,35,.32),transparent_38%)]" />
-        <div className="relative"><Brand href="/" /></div>
-        <div className="relative max-w-xl">
-          <p className="text-xs font-black uppercase tracking-[.18em] text-red-400 dark:text-amber-400">Seu dojo digital</p>
-          <h1 className="mt-5 text-6xl font-black leading-[.96] tracking-[-.06em]">O treino passa.<br />O aprendizado fica.</h1>
-          <p className="mt-6 max-w-lg text-lg leading-8 text-stone-400">Construa um histórico do seu judô e chegue ao próximo treino sabendo exatamente onde focar.</p>
-          <div className="mt-9 grid grid-cols-2 gap-3">
-            {["Registros rápidos", "Plano de jogo", "Visão da evolução", "Acesso em qualquer tela"].map((item) => (
-              <span key={item} className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 p-3 text-sm font-bold text-stone-200"><Check className="size-4 text-red-400 dark:text-amber-400" />{item}</span>
+      <section className="hidden bg-stone-950 p-10 text-white lg:flex lg:flex-col lg:justify-between dark:bg-[#1c1611]">
+        <Brand href="/" onDark />
+        <div className="max-w-xl">
+          <h1 className="text-[3.6rem] font-black leading-[.98] tracking-[-.04em]">O treino passa.<br /><span className="text-red-400 dark:text-amber-400">O aprendizado fica.</span></h1>
+          <p className="mt-6 max-w-md text-lg leading-8 text-stone-300">Construa um histórico do seu judô e chegue ao próximo treino sabendo exatamente onde focar.</p>
+          <ul className="mt-9 space-y-3">
+            {["Registro de treino em menos de 3 minutos", "Plano de jogo sempre à mão", "Funciona no celular e no computador"].map((item) => (
+              <li key={item} className="flex items-center gap-3 text-[15px] font-semibold text-stone-200"><Check className="size-4 text-red-400 dark:text-amber-400" />{item}</li>
             ))}
-          </div>
+          </ul>
         </div>
-        <p className="relative text-xs text-stone-500">Judo Calendar · Treine. Registre. Evolua.</p>
+        <p className="text-xs text-stone-500">Judo Calendar · Treine. Registre. Evolua.</p>
       </section>
 
       <section className="flex min-h-screen flex-col px-5 py-6 sm:px-10 lg:px-16">
         <div className="flex items-center justify-between">
           <div className="lg:hidden"><Brand /></div>
-          <button type="button" onClick={() => window.location.assign("/")} className="hidden items-center gap-2 text-sm font-bold text-stone-500 transition hover:text-red-700 dark:text-stone-400 dark:hover:text-amber-300 lg:inline-flex"><ArrowLeft className="size-4" /> Voltar ao início</button>
+          <Link href="/" className="hidden items-center gap-2 text-sm font-bold text-stone-500 transition-colors hover:text-stone-950 dark:text-stone-400 dark:hover:text-stone-50 lg:inline-flex"><ArrowLeft className="size-4" /> Voltar ao início</Link>
           <ThemeToggle />
         </div>
         <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col justify-center py-12">
           <div>
-            <p className="text-xs font-black uppercase tracking-[.16em] text-red-700 dark:text-amber-400">{isSignup ? "Comece gratuitamente" : "Bem-vindo de volta"}</p>
-            <h2 className="mt-3 text-4xl font-black tracking-[-.045em]">{isSignup ? "Crie sua conta" : "Entre no seu dojo"}</h2>
+            <h2 className="text-4xl font-black tracking-[-.04em]">{isSignup ? "Crie sua conta grátis" : "Entre no seu dojo"}</h2>
             <p className="mt-3 text-[15px] leading-6 text-stone-500 dark:text-stone-400">{isSignup ? "Seu primeiro registro está a poucos segundos." : "Continue de onde parou e prepare o próximo treino."}</p>
           </div>
 
@@ -174,11 +169,11 @@ export function AuthPage({ mode, initialMessage = "" }: { mode: "login" | "signu
             </label>
             {isSignup && <label className="flex items-start gap-3 text-xs leading-5 text-stone-500 dark:text-stone-400"><input name="terms" required type="checkbox" className="mt-0.5 size-4 rounded accent-red-700 dark:accent-amber-500" />Concordo com os Termos de Uso e a Política de Privacidade do Judo Calendar.</label>}
             {message && <p role="status" aria-live="polite" className={`rounded-xl border px-4 py-3 text-sm font-bold ${success ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300" : "border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"}`}>{message}</p>}
-            <button disabled={loading} className="group flex h-13 w-full items-center justify-center gap-2 rounded-xl bg-red-700 text-sm font-extrabold text-white shadow-[0_12px_30px_rgba(185,28,28,.18)] transition hover:bg-red-800 disabled:cursor-wait disabled:opacity-70 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400">{loading ? "Preparando seu dojo..." : isSignup ? "Criar conta grátis" : "Entrar"}<ArrowRight className="size-4 transition-transform group-hover:translate-x-1" /></button>
+            <button disabled={loading} className="group flex h-13 w-full items-center justify-center gap-2 rounded-xl bg-red-700 text-sm font-extrabold text-white transition hover:bg-red-800 disabled:cursor-wait disabled:opacity-70 dark:bg-amber-500 dark:text-stone-950 dark:hover:bg-amber-400">{loading ? "Preparando seu dojo..." : isSignup ? "Criar conta grátis" : "Entrar"}<ArrowRight className="size-4 transition-transform group-hover:translate-x-1" /></button>
           </form>
 
           <p className="mt-7 text-center text-sm text-stone-500 dark:text-stone-400">{isSignup ? "Já tem uma conta?" : "Ainda não tem uma conta?"} <a href={isSignup ? "/entrar" : "/cadastro"} className="font-extrabold text-red-700 hover:underline dark:text-amber-400">{isSignup ? "Entrar" : "Criar gratuitamente"}</a></p>
-          <p className="mt-6 rounded-xl border border-stone-200 bg-white/60 p-3 text-center text-[11px] leading-5 text-stone-400 dark:border-white/8 dark:bg-white/[.025]">Autenticação protegida pelo Supabase. Sua senha nunca é salva nas tabelas públicas do app.</p>
+          <p className="mt-8 flex items-center justify-center gap-2 text-center text-xs text-stone-500 dark:text-stone-400"><LockKeyhole className="size-3.5" /> Sua senha é armazenada criptografada.</p>
         </div>
       </section>
     </main>

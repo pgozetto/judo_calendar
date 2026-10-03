@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Dashboard } from "@/components/dashboard";
+import { hasProAccess } from "@/lib/billing";
 import { createClient } from "@/lib/supabase/server";
 import { formatRelativeUpdate, type CompetitionEvent, type DashboardInitialData } from "@/lib/dashboard-data";
 import type { Tables } from "@/lib/database.types";
@@ -84,7 +85,7 @@ export default async function AppPage() {
 
   const planId = subscriptionResult.data?.plan_id ?? "free";
   const planData = (plansResult.data ?? []).find((plan) => plan.id === planId);
-  const proAccess = Boolean(subscriptionResult.data?.lifetime_access || planData?.pro_access);
+  const proAccess = hasProAccess(subscriptionResult.data, planData);
   const gamePlan = gamePlanResult.data;
   const trainingSchedule = trainingScheduleResult.data;
   const reviewSchedule = reviewScheduleResult.data;
@@ -165,7 +166,9 @@ export default async function AppPage() {
       createdAt: notification.created_at,
       readAt: notification.read_at,
     })),
-    plan: { id: planData?.id ?? planId, name: planData?.name ?? "Gratuito", proAccess },
+    plan: proAccess
+      ? { id: planData?.id ?? planId, name: planData?.name ?? "Pró", proAccess }
+      : { id: "free", name: "Gratuito", proAccess },
   };
 
   return <Dashboard initialData={initialData} />;

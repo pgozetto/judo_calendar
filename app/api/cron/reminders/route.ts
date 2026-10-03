@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { hasProAccess } from "@/lib/billing";
+import { escapeHtml, hasBearerSecret } from "@/lib/security";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -40,8 +42,7 @@ function htmlLayout(title: string, content: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!hasBearerSecret(request, process.env.CRON_SECRET)) {
     return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   }
   const resendKey = process.env.RESEND_API_KEY;
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
   const admin = createAdminClient();
   const today = new Date();
   const weekAgo = new Date(today.getTime() - 7 * 86_400_000).toISOString().slice(0, 10);
-  const [profilesResult, preferencesResult, trainingSchedulesResult, reviewSchedulesResult, gamePlansResult, recordsResult, subscriptionsResult, alertsResult, competitionsResult] = await Promise.all([
+  const [profilesResult, preferencesResult, trainingSchedulesResult, reviewSchedulesResult, gamePlansResult, recordsResult, subscriptionsResult, alertsResult, competitionsResult, plansResult] = await Promise.all([
     admin.from("profiles").select("*"),
     admin.from("email_preferences").select("*"),
     admin.from("training_schedules").select("*"),
@@ -61,9 +62,10 @@ export async function GET(request: NextRequest) {
     admin.from("subscriptions").select("*"),
     admin.from("competition_alerts").select("*"),
     admin.from("competitions").select("*"),
+    admin.from("subscription_plans").select("id,pro_access"),
   ]);
 
-  const failures = [profilesResult, preferencesResult, trainingSchedulesResult, reviewSchedulesResult, gamePlansResult, recordsResult, subscriptionsResult, alertsResult, competitionsResult].filter((result) => result.error);
+  const failures = [profilesResult, preferencesResult, trainingSchedulesResult, reviewSchedulesResult, gamePlansResult, recordsResult, subscriptionsResult, alertsResult, competitionsResult, plansResult].filter((result) => result.error);
   if (failures.length) return NextResponse.json({ error: "Falha ao carregar os lembretes." }, { status: 500 });
 
   const preferences = new Map((preferencesResult.data ?? []).map((item) => [item.user_id, item]));
@@ -72,6 +74,7 @@ export async function GET(request: NextRequest) {
   const gamePlans = new Map((gamePlansResult.data ?? []).map((item) => [item.user_id, item]));
   const subscriptions = new Map((subscriptionsResult.data ?? []).map((item) => [item.user_id, item]));
   const competitions = new Map((competitionsResult.data ?? []).map((item) => [item.id, item]));
+  const plans = new Map((plansResult.data ?? []).map((item) => [item.id, item]));
   const sent: string[] = [];
 
   async function send(userId: string, recipient: string, kind: string, dedupeKey: string, subject: string, html: string) {
@@ -93,10 +96,17 @@ export async function GET(request: NextRequest) {
   }
 
   for (const profile of profilesResult.data ?? []) {
-    const clock = localClock(today, profile.timezone);
+    // Um fuso inválido não pode interromper os lembretes de todos os usuários.
+    let clock: LocalClock;
+    try {
+      clock = localClock(today, profile.timezone);
+    } catch {
+      clock = localClock(today, "America/Sao_Paulo");
+    }
+    const name = escapeHtml(profile.display_name);
     const prefs = preferences.get(profile.id);
     const plan = subscriptions.get(profile.id);
-    const hasPro = plan?.status === "authorized" && (plan.plan_id === "pro_monthly" || plan.lifetime_access);
+    const hasPro = hasProAccess(plan, plan ? plans.get(plan.plan_id) : null);
     const schedule = trainingSchedules.get(profile.id);
     const gamePlan = gamePlans.get(profile.id);
 
@@ -106,7 +116,7 @@ export async function GET(request: NextRequest) {
       const reminderMinutes = (rawReminderMinutes + 1440) % 1440;
       const trainingDay = rawReminderMinutes < 0 ? (clock.weekday + 1) % 7 : clock.weekday;
       if (schedule.weekdays.includes(trainingDay) && withinWindow(clock.minutes, reminderMinutes)) {
-        const content = `<p>Olá, <strong>${profile.display_name}</strong>. Seu treino está chegando.</p><p><strong>Objetivo:</strong> ${gamePlan?.objective || "defina seu foco antes de subir no tatame"}</p><p><strong>Primeiro ataque:</strong> ${gamePlan?.first_attack || "revise seu plano de jogo"}</p>`;
+        const content = `<p>Olá, <strong>${name}</strong>. Seu treino está chegando.</p><p><strong>Objetivo:</strong> ${escapeHtml(gamePlan?.objective || "defina seu foco antes de subir no tatame")}</p><p><strong>Primeiro ataque:</strong> ${escapeHtml(gamePlan?.first_attack || "revise seu plano de jogo")}</p>`;
         await send(profile.id, profile.email, "training_reminder", `training:${profile.id}:${clock.date}:${trainingDay}`, "Seu próximo treino de judô", htmlLayout("Leve seu plano ao tatame", content));
       }
     }
@@ -115,7 +125,7 @@ export async function GET(request: NextRequest) {
     if (hasPro && prefs?.weekly_review && review?.enabled && review.weekday === clock.weekday && withinWindow(clock.minutes, minutesFromTime(review.local_time))) {
       const records = (recordsResult.data ?? []).filter((record) => record.user_id === profile.id);
       const focuses = records.map((record) => record.next_focus).filter(Boolean).slice(0, 3);
-      const content = `<p>Você registrou <strong>${records.length} treino${records.length === 1 ? "" : "s"}</strong> nos últimos 7 dias.</p>${focuses.length ? `<p><strong>Próximos focos:</strong></p><ul>${focuses.map((focus) => `<li>${focus}</li>`).join("")}</ul>` : "<p>Registre o próximo treino para construir seu histórico.</p>"}`;
+      const content = `<p>Você registrou <strong>${records.length} treino${records.length === 1 ? "" : "s"}</strong> nos últimos 7 dias.</p>${focuses.length ? `<p><strong>Próximos focos:</strong></p><ul>${focuses.map((focus) => `<li>${escapeHtml(focus)}</li>`).join("")}</ul>` : "<p>Registre o próximo treino para construir seu histórico.</p>"}`;
       await send(profile.id, profile.email, "weekly_review", `review:${profile.id}:${clock.date}`, "Sua revisão semanal de judô", htmlLayout("Sua semana no tatame", content));
     }
 
@@ -126,7 +136,7 @@ export async function GET(request: NextRequest) {
         if (!competition) continue;
         const days = Math.round((new Date(`${competition.starts_on}T12:00:00Z`).getTime() - new Date(`${clock.date}T12:00:00Z`).getTime()) / 86_400_000);
         if (!alert.days_before.includes(days)) continue;
-        const content = `<p>Faltam <strong>${days} dia${days === 1 ? "" : "s"}</strong> para <strong>${competition.name}</strong>.</p><p>${competition.place ?? "Local ainda não informado"}</p><p><a href="${competition.source_url}">Abrir a fonte oficial da FPJUDO</a></p>`;
+        const content = `<p>Faltam <strong>${days} dia${days === 1 ? "" : "s"}</strong> para <strong>${escapeHtml(competition.name)}</strong>.</p><p>${escapeHtml(competition.place ?? "Local ainda não informado")}</p><p><a href="${escapeHtml(competition.source_url)}">Abrir a fonte oficial da FPJUDO</a></p>`;
         await send(profile.id, profile.email, "competition_alert", `competition:${profile.id}:${competition.id}:${days}`, `Faltam ${days} dias: ${competition.name}`, htmlLayout("Competição no radar", content));
       }
     }

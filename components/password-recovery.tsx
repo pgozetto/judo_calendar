@@ -62,10 +62,9 @@ export function PasswordRecovery({ mode }: { mode: "request" | "update" }) {
   return (
     <main className="min-h-screen bg-[#f7f6f2] px-5 py-6 text-stone-950 dark:bg-[#100e0c] dark:text-stone-50 sm:px-8">
       <div className="mx-auto flex max-w-5xl items-center justify-between"><Brand /><ThemeToggle /></div>
-      <section className="mx-auto mt-16 max-w-md rounded-[26px] border border-stone-200 bg-white p-6 shadow-xl shadow-stone-200/40 sm:p-8 dark:border-white/10 dark:bg-white/[.035] dark:shadow-none">
+      <section className="mx-auto mt-16 max-w-md rounded-2xl border border-stone-200 bg-white p-6 sm:p-8 dark:border-white/10 dark:bg-white/[.035] dark:shadow-none">
         <span className="grid size-12 place-items-center rounded-xl bg-red-50 text-red-700 dark:bg-amber-500/10 dark:text-amber-300">{requesting ? <Mail className="size-5" /> : <KeyRound className="size-5" />}</span>
-        <p className="mt-6 text-xs font-black uppercase tracking-[.14em] text-red-700 dark:text-amber-400">Segurança da conta</p>
-        <h1 className="mt-2 text-3xl font-black tracking-[-.04em]">{requesting ? "Recupere sua senha" : "Crie uma nova senha"}</h1>
+        <h1 className="mt-6 text-3xl font-black tracking-[-.04em]">{requesting ? "Recupere sua senha" : "Crie uma nova senha"}</h1>
         <p className="mt-3 text-sm leading-6 text-stone-500 dark:text-stone-400">{requesting ? "Informe o mesmo e-mail usado no cadastro." : "Escolha uma senha nova com pelo menos 8 caracteres."}</p>
 
         <form onSubmit={handleSubmit} className="mt-7 space-y-4">

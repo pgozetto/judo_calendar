@@ -12,6 +12,8 @@ type WebhookBody = {
   data?: { id?: string | number };
 };
 
+const MAX_SIGNATURE_AGE_MS = 10 * 60 * 1000;
+
 function verifySignature(request: NextRequest, dataId: string) {
   const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
   const signature = request.headers.get("x-signature");
@@ -20,6 +22,12 @@ function verifySignature(request: NextRequest, dataId: string) {
 
   const parts = Object.fromEntries(signature.split(",").map((part) => part.trim().split("=", 2)));
   if (!parts.ts || !parts.v1) return false;
+
+  // Rejeita notificações antigas reenviadas por terceiros (replay).
+  const timestamp = Number(parts.ts);
+  const timestampMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+  if (!Number.isFinite(timestampMs) || Math.abs(Date.now() - timestampMs) > MAX_SIGNATURE_AGE_MS) return false;
+
   const manifest = `id:${dataId};request-id:${requestId};ts:${parts.ts};`;
   const expected = createHmac("sha256", secret).update(manifest).digest("hex");
   const actualBuffer = Buffer.from(parts.v1);
@@ -35,6 +43,12 @@ function mapSubscriptionStatus(value: string) {
     cancelled: "cancelled",
   } as const;
   return statuses[value as keyof typeof statuses] ?? "payment_failed";
+}
+
+async function fetchMercadoPago(path: string, accessToken: string) {
+  const response = await fetch(`https://api.mercadopago.com${path}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!response.ok) throw new Error(`Recurso do Mercado Pago indisponível (${response.status}).`);
+  return await response.json() as Record<string, unknown>;
 }
 
 export async function POST(request: NextRequest) {
@@ -61,38 +75,65 @@ export async function POST(request: NextRequest) {
   if (event?.processed_at) return NextResponse.json({ ok: true, duplicate: true });
 
   try {
-    const isSubscription = eventType.includes("subscription") || eventType === "preapproval";
-    const resourceUrl = isSubscription
-      ? `https://api.mercadopago.com/preapproval/${dataId}`
-      : `https://api.mercadopago.com/v1/payments/${dataId}`;
-    const resourceResponse = await fetch(resourceUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (!resourceResponse.ok) throw new Error("Recurso do Mercado Pago indisponível.");
-    const resource = await resourceResponse.json() as Record<string, unknown>;
+    // Cobranças mensais chegam como "subscription_authorized_payment" e apontam
+    // para a assinatura (preapproval) que precisa ser consultada.
+    let preapprovalId: string | null = null;
+    if (eventType === "subscription_authorized_payment") {
+      const authorizedPayment = await fetchMercadoPago(`/authorized_payments/${encodeURIComponent(dataId)}`, accessToken);
+      preapprovalId = typeof authorizedPayment.preapproval_id === "string" ? authorizedPayment.preapproval_id : null;
+      if (!preapprovalId) throw new Error("Cobrança recorrente sem assinatura vinculada.");
+    } else if (eventType.includes("subscription") || eventType === "preapproval") {
+      preapprovalId = dataId;
+    }
+
+    const resource = preapprovalId
+      ? await fetchMercadoPago(`/preapproval/${encodeURIComponent(preapprovalId)}`, accessToken)
+      : await fetchMercadoPago(`/v1/payments/${encodeURIComponent(dataId)}`, accessToken);
     const externalReference = String(resource.external_reference ?? "");
     const [userId, planId] = externalReference.split(":");
     if (!userId || !planId) throw new Error("Referência externa inválida.");
 
-    if (isSubscription) {
-      const status = mapSubscriptionStatus(String(resource.status ?? ""));
-      await admin.from("subscriptions").update({
-        plan_id: "pro_monthly",
-        provider: "mercado_pago",
-        provider_subscription_id: String(resource.id ?? dataId),
-        status,
-        current_period_start: typeof resource.date_created === "string" ? resource.date_created : null,
-        current_period_end: typeof resource.next_payment_date === "string" ? resource.next_payment_date : null,
-        lifetime_access: false,
-        metadata: resource as Json,
-      }).eq("user_id", userId);
-      if (status === "authorized") {
-        await admin.from("notifications").insert({ user_id: userId, title: "Plano Pró ativado", body: "Seu acesso aos recursos Pró já está disponível.", kind: "billing", href: "/app" });
+    const [{ data: current }, { data: plan }] = await Promise.all([
+      admin.from("subscriptions").select("*").eq("user_id", userId).maybeSingle(),
+      admin.from("subscription_plans").select("*").eq("id", planId).maybeSingle(),
+    ]);
+    if (!current || !plan) throw new Error("Assinatura ou plano não encontrado.");
+
+    if (preapprovalId) {
+      // Eventos atrasados da mensalidade não podem sobrescrever um acesso vitalício.
+      if (!current.lifetime_access) {
+        const status = mapSubscriptionStatus(String(resource.status ?? ""));
+        await admin.from("subscriptions").update({
+          plan_id: "pro_monthly",
+          provider: "mercado_pago",
+          provider_subscription_id: String(resource.id ?? preapprovalId),
+          status,
+          current_period_start: typeof resource.date_created === "string" ? resource.date_created : null,
+          current_period_end: typeof resource.next_payment_date === "string" ? resource.next_payment_date : current.current_period_end,
+          lifetime_access: false,
+          metadata: resource as Json,
+        }).eq("user_id", userId);
+        if (status === "authorized" && current.status !== "authorized") {
+          await admin.from("notifications").insert({ user_id: userId, title: "Plano Pró ativado", body: "Seu acesso aos recursos Pró já está disponível.", kind: "billing", href: "/app" });
+        }
       }
     } else {
       const approved = resource.status === "approved";
-      if (planId === "founder_lifetime" && approved) {
+      const paidAmount = Number(resource.transaction_amount ?? 0);
+      const paidEnough = resource.currency_id === plan.currency && paidAmount * 100 >= plan.price_cents;
+      if (planId === "founder_lifetime" && approved && paidEnough && !current.lifetime_access) {
+        // Quem migra da mensalidade para o vitalício não deve continuar sendo cobrado.
+        if (current.provider_subscription_id && current.status === "authorized") {
+          await fetch(`https://api.mercadopago.com/preapproval/${encodeURIComponent(current.provider_subscription_id)}`, {
+            method: "PUT",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "cancelled" }),
+          });
+        }
         await admin.from("subscriptions").update({
           plan_id: "founder_lifetime",
           provider: "mercado_pago",
+          provider_subscription_id: null,
           provider_payment_id: String(resource.id ?? dataId),
           status: "authorized",
           lifetime_access: true,
@@ -101,6 +142,8 @@ export async function POST(request: NextRequest) {
           metadata: resource as Json,
         }).eq("user_id", userId);
         await admin.from("notifications").insert({ user_id: userId, title: "Acesso vitalício ativado", body: "Bem-vindo ao grupo de membros fundadores do Judo Calendar.", kind: "billing", href: "/app" });
+      } else if (planId === "founder_lifetime" && approved && !paidEnough) {
+        throw new Error("Valor pago diferente do preço do plano.");
       }
     }
 

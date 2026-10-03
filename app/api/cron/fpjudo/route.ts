@@ -1,10 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { fetchFpjudoCalendarSources } from "@/lib/fpjudo";
+import { hasBearerSecret } from "@/lib/security";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+export const runtime = "nodejs";
+
 export async function GET(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!hasBearerSecret(request, process.env.CRON_SECRET)) {
     return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   }
 
@@ -23,6 +25,7 @@ export async function GET(request: NextRequest) {
     if (error) throw error;
     return NextResponse.json({ ok: true, latest: sources[0] ?? null, found: sources.length });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Falha na sincronização." }, { status: 502 });
+    console.error("Falha na sincronização da FPJUDO", error);
+    return NextResponse.json({ error: "Falha na sincronização." }, { status: 502 });
   }
 }

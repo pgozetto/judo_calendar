@@ -1,5 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
+import { hasProAccess } from "@/lib/billing";
+import type { Json } from "@/lib/database.types";
+import { isSameOrigin } from "@/lib/security";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -12,15 +15,14 @@ const checkoutSchema = z.object({
 type MercadoPagoCheckout = { id: string; init_point?: string; sandbox_init_point?: string };
 
 export async function POST(request: NextRequest) {
+  if (!isSameOrigin(request)) return NextResponse.json({ error: "Origem da solicitação inválida." }, { status: 403 });
+
   const parsed = checkoutSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Plano inválido." }, { status: 400 });
 
   const supabase = await createClient();
-  const [{ data: claimsData }, { data: userData }] = await Promise.all([
-    supabase.auth.getClaims(),
-    supabase.auth.getUser(),
-  ]);
-  const userId = claimsData?.claims?.sub;
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
   const email = userData.user?.email;
   if (!userId || !email) return NextResponse.json({ error: "Faça login para continuar." }, { status: 401 });
 
@@ -29,8 +31,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Pagamento ainda não configurado pelo administrador." }, { status: 503 });
   }
 
-  const { data: plan } = await supabase.from("subscription_plans").select("*").eq("id", parsed.data.plan).single();
+  const [{ data: plans }, { data: subscription }] = await Promise.all([
+    supabase.from("subscription_plans").select("*"),
+    supabase.from("subscriptions").select("*").eq("user_id", userId).maybeSingle(),
+  ]);
+  const plan = plans?.find((item) => item.id === parsed.data.plan && item.active);
+  const currentPlan = plans?.find((item) => item.id === subscription?.plan_id);
   if (!plan) return NextResponse.json({ error: "Plano indisponível." }, { status: 404 });
+
+  // Quem já paga não pode ter o acesso rebaixado para "pendente" ao abrir outro checkout.
+  const alreadyPro = hasProAccess(subscription, currentPlan);
+  if (alreadyPro && subscription?.lifetime_access) {
+    return NextResponse.json({ error: "Você já tem acesso vitalício ao Pró." }, { status: 409 });
+  }
+  if (alreadyPro && plan.id === "pro_monthly") {
+    return NextResponse.json({ error: "Sua assinatura Pró já está ativa." }, { status: 409 });
+  }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
   const notificationUrl = `${appUrl}/api/billing/webhook`;
@@ -90,15 +106,21 @@ export async function POST(request: NextRequest) {
   const checkoutUrl = checkout.init_point ?? checkout.sandbox_init_point;
   if (!checkoutUrl) return NextResponse.json({ error: "O checkout não retornou um link válido." }, { status: 502 });
 
+  const pendingCheckout = { checkout_id: checkout.id, checkout_kind: recurring ? "subscription" : "one_time", plan_id: plan.id };
   const admin = createAdminClient();
-  const { error: saveError } = await admin.from("subscriptions").update({
-    plan_id: plan.id,
-    provider: "mercado_pago",
-    provider_subscription_id: recurring ? checkout.id : null,
-    status: "pending",
-    lifetime_access: false,
-    metadata: { checkout_id: checkout.id, checkout_kind: recurring ? "subscription" : "one_time" },
-  }).eq("user_id", userId);
+  // O acesso Pró só muda quando o webhook confirma o pagamento.
+  const { error: saveError } = alreadyPro
+    ? await admin.from("subscriptions").update({
+        metadata: { ...(subscription?.metadata as Record<string, Json> | null ?? {}), pending_checkout: pendingCheckout },
+      }).eq("user_id", userId)
+    : await admin.from("subscriptions").update({
+        plan_id: plan.id,
+        provider: "mercado_pago",
+        provider_subscription_id: recurring ? checkout.id : null,
+        status: "pending",
+        lifetime_access: false,
+        metadata: pendingCheckout,
+      }).eq("user_id", userId);
 
   if (saveError) return NextResponse.json({ error: "Checkout criado, mas não foi possível registrar a cobrança." }, { status: 500 });
   return NextResponse.json({ url: checkoutUrl });
